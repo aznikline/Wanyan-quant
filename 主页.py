@@ -15,14 +15,14 @@ from strategies import get_all_strategies, create_strategy
 from data_loader import DataLoader
 
 st.set_page_config(
-    page_title="Rock Quant 2.0 - 顽岩风格量价模型",
+    page_title="Rock Quant 2.0 - 顽岩量价模型",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.title("📈 Rock Quant 2.0")
-st.markdown("## 顽岩风格量价模型量化回测平台")
+st.markdown("## 顽岩量价模型量化回测平台")
 st.markdown("---")
 
 st.sidebar.success("👈 选择左侧页面进入对应功能")
@@ -190,4 +190,4 @@ with tab4:
             st.markdown(f"{item['进度']}%")
 
 st.markdown("---")
-st.caption("Rock Quant 2.0 - 顽岩风格量价模型 | 完整开源")
+st.caption("Rock Quant 2.0 - 顽岩量价模型 | 完整开源")
