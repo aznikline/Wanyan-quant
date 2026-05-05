@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "rockquant"
+version = "2.0.0"
+description = "完颜风格量价模型量化回测平台"
+authors = ["Rock Quant Team"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+pandas = "^2.0.0"
+numpy = "^1.24.0"
+streamlit = "^1.30.0"
+plotly = "^5.18.0"
+altair = "^5.2.0"
+pydantic = "^2.5.0"
+pyyaml = "^6.0.1"
+tushare = "^1.2.89"
+akshare = "^1.10.0"
+scipy = "^1.11.0"
+jinja2 = "^3.1.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.4.0"
+black = "^23.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
