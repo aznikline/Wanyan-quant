@@ -204,12 +204,184 @@ class BollingerStrategy(BaseStrategy):
         }
 
 
+class KDJStrategy(BaseStrategy):
+    """KDJ随机指标策略"""
+    
+    name = "kdj"
+    description = "KDJ金叉买入，死叉卖出，超买超卖区域过滤"
+    
+    def __init__(self, n: int = 9, m1: int = 3, m2: int = 3, overbought: int = 80, oversold: int = 20):
+        self.n = n
+        self.m1 = m1
+        self.m2 = m2
+        self.overbought = overbought
+        self.oversold = oversold
+    
+    def generate_signals(self, data: pd.DataFrame) -> pd.Series:
+        low_list = data['low'].rolling(self.n, min_periods=1).min()
+        high_list = data['high'].rolling(self.n, min_periods=1).max()
+        rsv = (data['close'] - low_list) / (high_list - low_list) * 100
+        rsv = rsv.fillna(50)
+        
+        k = rsv.ewm(com=self.m1-1, adjust=False).mean()
+        d = k.ewm(com=self.m2-1, adjust=False).mean()
+        
+        golden_cross = (k > d) & (k.shift(1) <= d.shift(1)) & (k < self.overbought)
+        death_cross = (k < d) & (k.shift(1) >= d.shift(1)) & (k > self.oversold)
+        
+        signals = pd.Series(0, index=data.index)
+        signals[golden_cross] = 1
+        signals[death_cross] = -1
+        
+        signals = signals.replace(0, np.nan).ffill().fillna(0)
+        return signals
+    
+    def get_params_schema(self) -> Dict[str, Any]:
+        return {
+            "n": {"type": "int", "default": 9, "min": 5, "max": 30, "description": "RSV周期"},
+            "m1": {"type": "int", "default": 3, "min": 2, "max": 10, "description": "K值平滑"},
+            "m2": {"type": "int", "default": 3, "min": 2, "max": 10, "description": "D值平滑"},
+            "overbought": {"type": "int", "default": 80, "min": 70, "max": 90, "description": "超买阈值"},
+            "oversold": {"type": "int", "default": 20, "min": 10, "max": 40, "description": "超卖阈值"}
+        }
+
+
+class CCIStrategy(BaseStrategy):
+    """CCI顺势指标策略"""
+    
+    name = "cci"
+    description = "CCI突破+100买入，跌破-100卖出，抓趋势启动点"
+    
+    def __init__(self, period: int = 14, upper: int = 100, lower: int = -100):
+        self.period = period
+        self.upper = upper
+        self.lower = lower
+    
+    def generate_signals(self, data: pd.DataFrame) -> pd.Series:
+        tp = (data['high'] + data['low'] + data['close']) / 3
+        ma = tp.rolling(self.period).mean()
+        md = tp.rolling(self.period).apply(lambda x: np.mean(np.abs(x - np.mean(x))))
+        cci = (tp - ma) / (0.015 * md)
+        
+        break_upper = (cci > self.upper) & (cci.shift(1) <= self.upper)
+        break_lower = (cci < self.lower) & (cci.shift(1) >= self.lower)
+        
+        signals = pd.Series(0, index=data.index)
+        signals[break_upper] = 1
+        signals[break_lower] = -1
+        
+        signals = signals.replace(0, np.nan).ffill().fillna(0)
+        return signals
+    
+    def get_params_schema(self) -> Dict[str, Any]:
+        return {
+            "period": {"type": "int", "default": 14, "min": 5, "max": 60, "description": "CCI周期"},
+            "upper": {"type": "int", "default": 100, "min": 50, "max": 200, "description": "上轨阈值"},
+            "lower": {"type": "int", "default": -100, "min": -200, "max": -50, "description": "下轨阈值"}
+        }
+
+
+class VolumeBreakoutStrategy(BaseStrategy):
+    """成交量突破策略"""
+    
+    name = "volume_breakout"
+    description = "放量突破买入，缩量跌破均线卖出，量价配合验证"
+    
+    def __init__(self, volume_period: int = 20, price_period: int = 20, volume_multiplier: float = 2.0):
+        self.volume_period = volume_period
+        self.price_period = price_period
+        self.volume_multiplier = volume_multiplier
+    
+    def generate_signals(self, data: pd.DataFrame) -> pd.Series:
+        close = data['close']
+        volume = data['volume']
+        
+        ma_volume = volume.rolling(self.volume_period).mean()
+        ma_price = close.rolling(self.price_period).mean()
+        
+        # 放量突破：成交量放大N倍 + 价格突破均线
+        volume_breakout = volume > self.volume_multiplier * ma_volume
+        price_breakout = (close > ma_price) & (close.shift(1) <= ma_price.shift(1))
+        buy_signal = volume_breakout & price_breakout
+        
+        # 跌破均线卖出
+        price_breakdown = (close < ma_price) & (close.shift(1) >= ma_price.shift(1))
+        
+        signals = pd.Series(0, index=data.index)
+        signals[buy_signal] = 1
+        signals[price_breakdown] = -1
+        
+        signals = signals.replace(0, np.nan).ffill().fillna(0)
+        return signals
+    
+    def get_params_schema(self) -> Dict[str, Any]:
+        return {
+            "volume_period": {"type": "int", "default": 20, "min": 5, "max": 60, "description": "成交量均线周期"},
+            "price_period": {"type": "int", "default": 20, "min": 5, "max": 60, "description": "价格均线周期"},
+            "volume_multiplier": {"type": "float", "default": 2.0, "min": 1.2, "max": 5.0, "description": "放量倍数"}
+        }
+
+
+class DMIStrategy(BaseStrategy):
+    """DMI趋向指标策略"""
+    
+    name = "dmi"
+    description = "+DI上穿-DI买入，下穿卖出，ADX过滤趋势强度"
+    
+    def __init__(self, period: int = 14, adx_threshold: int = 25):
+        self.period = period
+        self.adx_threshold = adx_threshold
+    
+    def generate_signals(self, data: pd.DataFrame) -> pd.Series:
+        high = data['high']
+        low = data['low']
+        close = data['close']
+        
+        tr1 = high - low
+        tr2 = abs(high - close.shift(1))
+        tr3 = abs(low - close.shift(1))
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = tr.rolling(self.period).mean()
+        
+        plus_dm = high.diff()
+        minus_dm = low.diff() * -1
+        plus_dm[plus_dm < 0] = 0
+        minus_dm[minus_dm < 0] = 0
+        plus_dm_smooth = plus_dm.rolling(self.period).mean()
+        minus_dm_smooth = minus_dm.rolling(self.period).mean()
+        
+        plus_di = 100 * plus_dm_smooth / atr
+        minus_di = 100 * minus_dm_smooth / atr
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di + 0.001)
+        adx = dx.rolling(self.period).mean()
+        
+        golden_cross = (plus_di > minus_di) & (plus_di.shift(1) <= minus_di.shift(1)) & (adx > self.adx_threshold)
+        death_cross = (plus_di < minus_di) & (plus_di.shift(1) >= minus_di.shift(1))
+        
+        signals = pd.Series(0, index=data.index)
+        signals[golden_cross] = 1
+        signals[death_cross] = -1
+        
+        signals = signals.replace(0, np.nan).ffill().fillna(0)
+        return signals
+    
+    def get_params_schema(self) -> Dict[str, Any]:
+        return {
+            "period": {"type": "int", "default": 14, "min": 5, "max": 30, "description": "DMI周期"},
+            "adx_threshold": {"type": "int", "default": 25, "min": 15, "max": 40, "description": "ADX趋势强度阈值"}
+        }
+
+
 # 策略注册中心
 STRATEGY_REGISTRY = {
     "双均线策略": DualMAStrategy,
     "MACD策略": MACDStrategy,
     "RSI超买超卖策略": RSIStrategy,
     "布林带突破策略": BollingerStrategy,
+    "KDJ随机指标策略": KDJStrategy,
+    "CCI顺势指标策略": CCIStrategy,
+    "成交量突破策略": VolumeBreakoutStrategy,
+    "DMI趋向指标策略": DMIStrategy,
 }
 
 
