@@ -20,6 +20,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ========== 全局初始化 - 放在最前面避免作用域问题 ==========
+loader = DataLoader()
+preset_symbols = list(loader.preset_symbols.keys())
+all_strategies = get_all_strategies()
+
 st.title("📈 策略回测")
 st.caption("单策略回测与深度绩效分析")
 
@@ -30,17 +35,14 @@ st.markdown("---")
 
 # ========== 快速参数处理 ==========
 # 从首页快速开始按钮传过来的参数
-loader = DataLoader()
-preset_symbols = list(loader.preset_symbols.keys())
-all_strategies = get_all_strategies()
-
 default_strategy = 0
-auto_run = False  # 是否自动触发回测
+default_symbol = 0
+auto_run = False
+
 if 'quick_strategy' in st.session_state and st.session_state.quick_strategy in all_strategies:
     default_strategy = all_strategies.index(st.session_state.quick_strategy)
     auto_run = True  # 从快速开始进来，自动回测
     
-default_symbol = 0
 if 'quick_symbol' in st.session_state and st.session_state.quick_symbol in preset_symbols:
     default_symbol = preset_symbols.index(st.session_state.quick_symbol)
 
@@ -60,45 +62,50 @@ with st.sidebar:
     st.subheader("资金配置")
     initial_capital = st.number_input("初始资金", value=1000000, step=100000, key="initial_capital")
     
-    # 策略参数动态生成
+    # 策略参数动态生成 - 所有参数都存到 session_state
     st.subheader("策略参数")
     strategy = create_strategy(strategy_name)
-    strategy_params = {}
+    param_schema = strategy.get_params_schema()
     
-    for param_name, param_config in strategy.get_params_schema().items():
+    for param_name, param_config in param_schema.items():
         param_type = param_config.get('type', 'int')
         param_default = param_config.get('default', 20)
         param_min = param_config.get('min', 1)
         param_max = param_config.get('max', 200)
         
+        key = f"param_{strategy_name}_{param_name}"
+        
         if param_type == 'int':
-            strategy_params[param_name] = st.slider(
+            st.session_state[key] = st.slider(
                 param_name, 
                 min_value=param_min, 
                 max_value=param_max, 
                 value=param_default,
-                key=f"param_{param_name}"
+                key=key
             )
         elif param_type == 'float':
-            strategy_params[param_name] = st.slider(
+            st.session_state[key] = st.slider(
                 param_name, 
                 min_value=float(param_min), 
                 max_value=float(param_max), 
                 value=float(param_default),
-                key=f"param_{param_name}"
+                key=key
             )
-    
-    # 更新策略参数
-    for param_name, param_value in strategy_params.items():
-        setattr(strategy, param_name, param_value)
 
 # ========== 运行回测 ==========
-# 手动点击回测按钮 或 从快速开始自动触发
-run_triggered = st.button("🚀 开始回测", type="primary") or (auto_run and 'last_result' not in st.session_state)
+# 手动点击回测按钮 或 从快速开始自动触发（加个flag防止重复触发）
+run_triggered = st.button("🚀 开始回测", type="primary") or (auto_run and 'last_result' not in st.session_state and 'auto_run_done' not in st.session_state)
 
 if run_triggered:
     try:
         with st.spinner("回测计算中..."):
+            # 标记自动回测已完成，防止重复触发
+            if auto_run:
+                st.session_state['auto_run_done'] = True
+                # 清除快速开始标记
+                if 'quick_strategy' in st.session_state:
+                    del st.session_state['quick_strategy']
+            
             symbol_code = loader.preset_symbols[symbol_name]
             data = loader.load_data(symbol_code, str(start_date), str(end_date))
             
@@ -107,6 +114,14 @@ if run_triggered:
             
             config = BacktestConfig(initial_capital=initial_capital)
             engine = BacktestEngine(config)
+            
+            # 关键修复：每次回测都重新创建strategy对象，从session_state读取参数
+            strategy = create_strategy(strategy_name)
+            for param_name in param_schema.keys():
+                key = f"param_{strategy_name}_{param_name}"
+                if key in st.session_state:
+                    setattr(strategy, param_name, st.session_state[key])
+            
             signals = strategy.generate_signals(data)
             result = engine.run(data, signals)
             perf = result.performance
@@ -119,9 +134,6 @@ if run_triggered:
             st.session_state.start_date = start_date
             st.session_state.end_date = end_date
             st.session_state.initial_capital = initial_capital
-            # 清除自动回测标记，避免重复触发
-            if 'quick_strategy' in st.session_state:
-                del st.session_state['quick_strategy']
             
     except Exception as e:
         st.error(f"❌ 回测失败: {str(e)}")
@@ -131,8 +143,10 @@ if run_triggered:
 if 'last_result' in st.session_state:
     result = st.session_state.last_result
     perf = st.session_state.last_perf
+    current_strategy = st.session_state.last_strategy
+    current_symbol = st.session_state.last_symbol
     
-    st.success(f"回测完成 - {st.session_state.last_strategy} @ {st.session_state.last_symbol}")
+    st.success(f"回测完成 - {current_strategy} @ {current_symbol}")
     st.markdown("---")
     
     # ========== 1. 核心绩效卡片 ==========
@@ -212,12 +226,11 @@ if 'last_result' in st.session_state:
         zmid=0,
         text=[[f"{v:.2f}%" for v in row] for row in pivot_data.values],
         texttemplate='%{text}',
-        textfont={"size": 11},
         showscale=True,
         colorbar=dict(title="收益率%")
     ))
     
-    fig_heatmap.update_layout(height=400)
+    fig_heatmap.update_layout(height=300)
     st.plotly_chart(fig_heatmap, use_container_width=True)
     
     # 月度统计
@@ -242,7 +255,7 @@ if 'last_result' in st.session_state:
     with st.expander("🔬 参数敏感性分析 - 扫描最优参数区间"):
         st.caption("自动扫描策略核心参数在不同取值下的表现，找到鲁棒性最强的参数区间")
         
-        strategy = create_strategy(st.session_state.last_strategy)
+        strategy = create_strategy(current_strategy)
         default_params = strategy.get_params_schema()
         
         if len(default_params) >= 1:
@@ -267,7 +280,6 @@ if 'last_result' in st.session_state:
             if st.button("开始参数扫描", type="primary"):
                 with st.spinner(f"正在扫描 {scan_param} 的参数敏感性..."):
                     # 生成扫描参数列表
-                    import numpy as np
                     scan_values = list(range(int(scan_start), int(scan_end) + 1, scan_step))
                     
                     # 从session_state读取回测参数，避免变量作用域问题
@@ -285,7 +297,7 @@ if 'last_result' in st.session_state:
                     scan_results = []
                     
                     for val in scan_values:
-                        test_strategy = create_strategy(st.session_state.last_strategy)
+                        test_strategy = create_strategy(current_strategy)
                         setattr(test_strategy, scan_param, val)
                         signals = test_strategy.generate_signals(data)
                         result = engine.run(data, signals)
@@ -304,7 +316,7 @@ if 'last_result' in st.session_state:
                     
                     df_scan = pd.DataFrame(scan_results)
                     
-                    # 绘制折线图（比单行热力图直观多了）
+                    # 绘制折线图
                     col1, col2 = st.columns([1, 1])
                     
                     with col1:
@@ -451,7 +463,7 @@ if 'last_result' in st.session_state:
         
         st.markdown("---")
         
-        # ========== 5. 交易明细 ==========
+        # ========== 6. 交易明细 ==========
         with st.expander("查看详细交易记录"):
             trades_display = trades.copy()
             trades_display['entry_date'] = pd.to_datetime(trades_display['entry_date']).dt.strftime('%Y-%m-%d')
@@ -486,7 +498,7 @@ else:
         st.markdown("建议至少30个交易日以上的回测周期")
     with col_b:
         st.caption("**参数调整**")
-        st.markdown("不同标的的最优参数可能不同")
+        st.markdown("不同标的的最优参数可能有差异")
     with col_c:
         st.caption("**结果解读**")
         st.markdown("回测结果仅供参考，不构成投资建议")
