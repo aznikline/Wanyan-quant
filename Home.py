@@ -21,6 +21,56 @@ with st.sidebar:
     st.markdown("- **批量分析**：多策略对比、多标的回测、组合优化")
     st.markdown("- **策略百科**：20个策略完整文档与实盘经验")
 
+# ========== 🔥 快速开始区
+st.markdown("### ⚡ 快速开始 - 一键回测")
+
+col1, col2, col3, col4 = st.columns(4)
+
+quick_presets = [
+    {
+        "name": "双均线策略",
+        "symbol": "沪深300",
+        "desc": "经典趋势跟踪",
+        "page": "策略回测",
+        "strategy": "双均线策略"
+    },
+    {
+        "name": "RSI策略",
+        "symbol": "沪深300",
+        "desc": "震荡反转神器",
+        "page": "策略回测",
+        "strategy": "RSI超买超卖策略"
+    },
+    {
+        "name": "4大策略PK",
+        "symbol": "沪深300",
+        "desc": "多策略横向对比",
+        "page": "批量分析",
+        "mode": "多策略对比"
+    },
+    {
+        "name": "策略组合优化",
+        "symbol": "沪深300",
+        "desc": "马科维茨权重计算",
+        "page": "批量分析",
+        "mode": "组合优化"
+    }
+]
+
+for idx, preset in enumerate(quick_presets):
+    with [col1, col2, col3, col4][idx]:
+        st.markdown(f"**{preset['name']}**")
+        st.caption(f"{preset['symbol']} | {preset['desc']}")
+        if st.button(f"→ 直接{preset['page']}", key=f"quick_{idx}", use_container_width=True):
+            if preset['page'] == "策略回测":
+                st.session_state.quick_strategy = preset.get('strategy')
+                st.session_state.quick_symbol = preset.get('symbol')
+                st.switch_page("pages/01_策略回测.py")
+            else:
+                st.switch_page("pages/02_批量分析.py")
+
+st.markdown("---")
+
 # ========== 功能卡片
 st.markdown("### 🎯 核心功能")
 
@@ -33,6 +83,7 @@ with col1:
     st.markdown("- 完整绩效指标计算")
     st.markdown("- 月度收益热力图")
     st.markdown("- 交易盈亏分布分析")
+    st.markdown("- 参数敏感性扫描")
     if st.button("进入策略回测 →", use_container_width=True, type="primary"):
         st.switch_page("pages/01_策略回测.py")
 
@@ -42,7 +93,7 @@ with col2:
     st.markdown("- 同一标的多策略对比")
     st.markdown("- 同一策略多标的回测")
     st.markdown("- 策略组合权重优化")
-    st.markdown("- 马科维茨有效前沿")
+    st.markdown("- 相关性矩阵分析")
     if st.button("进入批量分析 →", use_container_width=True, type="primary"):
         st.switch_page("pages/02_批量分析.py")
 
@@ -105,21 +156,21 @@ with col1:
     st.markdown("#### L1 入门层")
     st.caption("新手用户，刚接触量化")
     st.markdown("- 策略百科 学习原理")
-    st.markdown("- 策略回测 快速体验")
+    st.markdown("- 快速开始 一键体验")
     st.success("目标：建立正确的策略认知")
 
 with col2:
     st.markdown("#### L2 进阶层")
     st.caption("有一定经验，想优化")
-    st.markdown("- 批量分析 多策略对比")
-    st.markdown("- 找到适合自己的参数")
-    st.info("目标：找到适合自己的策略")
+    st.markdown("- 策略回测 深度分析")
+    st.markdown("- 参数扫描 找到最优值")
+    st.info("目标：找到适合自己的参数")
 
 with col3:
     st.markdown("#### L3 专业层")
     st.caption("专业交易者，稳定盈利")
-    st.markdown("- 多标的批量验证")
-    st.markdown("- 策略组合优化分散")
+    st.markdown("- 多策略对比 筛选优胜")
+    st.markdown("- 组合优化 分散风险")
     st.warning("目标：构建稳定的多策略系统")
 
 with col4:
@@ -158,4 +209,4 @@ for item in progress_data:
         st.markdown(f"{item['进度']}%")
 
 st.markdown("---")
-st.caption("Rock Quant 2.0 - 顽岩量价模型 | 完整开源 | 所有回测结果基于A股2010-2023年历史数据")
+st.caption("Rock Quant 2.1.1 - 顽岩量价模型 | 完整开源 | 所有回测结果基于A股历史数据")

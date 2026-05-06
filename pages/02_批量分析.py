@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 from pathlib import Path
 import sys
 
@@ -53,31 +54,37 @@ if analysis_mode == "同一标的 - 多策略对比":
         symbol_name = st.selectbox("选择标的", preset_symbols)
     
     with col2:
+        # 预选最常用的4个策略
+        default_selected = ["双均线策略", "MACD策略", "RSI超买超卖策略", "布林带突破策略"]
+        default_selected = [s for s in default_selected if s in get_all_strategies()]
+        
         selected_strategies = st.multiselect(
             "选择要对比的策略（建议3-5个）",
             get_all_strategies(),
-            default=get_all_strategies()[:4]
+            default=default_selected
         )
     
     if st.button("开始批量对比", type="primary") and len(selected_strategies) > 0:
-        with st.spinner(f"正在回测 {len(selected_strategies)} 个策略..."):
-            symbol_code = loader.preset_symbols[symbol_name]
-            data = loader.load_data(symbol_code, str(start_date), str(end_date))
-            config = BacktestConfig(initial_capital=initial_capital)
-            engine = BacktestEngine(config)
-            
-            results = {}
-            progress_bar = st.progress(0)
-            
-            for idx, strategy_name in enumerate(selected_strategies):
-                strategy = create_strategy(strategy_name)
-                signals = strategy.generate_signals(data)
-                result = engine.run(data, signals)
-                results[strategy_name] = result
-                progress_bar.progress((idx + 1) / len(selected_strategies))
-            
-            st.session_state.multi_strategy_results = results
-            st.session_state.multi_strategy_symbol = symbol_name
+        symbol_code = loader.preset_symbols[symbol_name]
+        data = loader.load_data(symbol_code, str(start_date), str(end_date))
+        config = BacktestConfig(initial_capital=initial_capital)
+        engine = BacktestEngine(config)
+        
+        results = {}
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for idx, strategy_name in enumerate(selected_strategies):
+            status_text.caption(f"正在回测: {strategy_name} ({idx+1}/{len(selected_strategies)})")
+            strategy = create_strategy(strategy_name)
+            signals = strategy.generate_signals(data)
+            result = engine.run(data, signals)
+            results[strategy_name] = result
+            progress_bar.progress((idx + 1) / len(selected_strategies))
+        
+        status_text.success(f"✅ {len(selected_strategies)} 个策略回测全部完成！")
+        st.session_state.multi_strategy_results = results
+        st.session_state.multi_strategy_symbol = symbol_name
     
     # 展示结果
     if 'multi_strategy_results' in st.session_state:
@@ -114,6 +121,13 @@ if analysis_mode == "同一标的 - 多策略对比":
         # 绩效对比表格
         st.subheader("🏆 绩效对比排名")
         
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            sort_by = st.selectbox("排序方式", 
+                ["夏普比率", "卡玛比率", "年化收益率%", "总收益率%", "最大回撤%", "胜率%", "交易次数"],
+                index=0
+            )
+        
         comparison_data = []
         for name, result in results.items():
             perf = result.performance
@@ -129,7 +143,15 @@ if analysis_mode == "同一标的 - 多策略对比":
             })
         
         df_comparison = pd.DataFrame(comparison_data)
-        st.dataframe(df_comparison, use_container_width=True, hide_index=True)
+        
+        # 排序
+        ascending = sort_by == "最大回撤%"
+        df_comparison = df_comparison.sort_values(by=sort_by, ascending=ascending)
+        df_comparison = df_comparison.reset_index(drop=True)
+        df_comparison.index = df_comparison.index + 1  # 排名从1开始
+        df_comparison.index.name = "排名"
+        
+        st.dataframe(df_comparison, use_container_width=True)
         
         # 雷达图
         st.markdown("---")

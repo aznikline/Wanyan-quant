@@ -24,15 +24,26 @@ st.title("📈 策略回测")
 st.caption("单策略回测与深度绩效分析")
 st.markdown("---")
 
+# ========== 快速参数处理 ==========
+# 从首页快速开始按钮传过来的参数
+loader = DataLoader()
+preset_symbols = list(loader.preset_symbols.keys())
+all_strategies = get_all_strategies()
+
+default_strategy = 0
+if 'quick_strategy' in st.session_state and st.session_state.quick_strategy in all_strategies:
+    default_strategy = all_strategies.index(st.session_state.quick_strategy)
+    
+default_symbol = 0
+if 'quick_symbol' in st.session_state and st.session_state.quick_symbol in preset_symbols:
+    default_symbol = preset_symbols.index(st.session_state.quick_symbol)
+
 # ========== 侧边栏参数配置 ==========
 with st.sidebar:
     st.header("回测参数")
     
-    strategy_name = st.selectbox("选择策略", get_all_strategies(), key="strategy_name")
-    
-    loader = DataLoader()
-    preset_symbols = list(loader.preset_symbols.keys())
-    symbol_name = st.selectbox("选择标的", preset_symbols, key="symbol_name")
+    strategy_name = st.selectbox("选择策略", all_strategies, index=default_strategy, key="strategy_name")
+    symbol_name = st.selectbox("选择标的", preset_symbols, index=default_symbol, key="symbol_name")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -48,7 +59,7 @@ with st.sidebar:
     strategy = create_strategy(strategy_name)
     strategy_params = {}
     
-    for param_name, param_config in strategy.get_default_parameters().items():
+    for param_name, param_config in strategy.get_params_schema().items():
         param_type = param_config.get('type', 'int')
         param_default = param_config.get('default', 20)
         param_min = param_config.get('min', 1)
@@ -72,24 +83,34 @@ with st.sidebar:
             )
     
     # 更新策略参数
-    strategy.set_parameters(strategy_params)
+    for param_name, param_value in strategy_params.items():
+        setattr(strategy, param_name, param_value)
 
 # ========== 运行回测 ==========
 if st.button("🚀 开始回测", type="primary"):
-    with st.spinner("回测计算中..."):
-        symbol_code = loader.preset_symbols[symbol_name]
-        data = loader.load_data(symbol_code, str(start_date), str(end_date))
-        config = BacktestConfig(initial_capital=initial_capital)
-        engine = BacktestEngine(config)
-        signals = strategy.generate_signals(data)
-        result = engine.run(data, signals)
-        perf = result.performance
-        
-        # 缓存到session_state
-        st.session_state.last_result = result
-        st.session_state.last_perf = perf
-        st.session_state.last_strategy = strategy_name
-        st.session_state.last_symbol = symbol_name
+    try:
+        with st.spinner("回测计算中..."):
+            symbol_code = loader.preset_symbols[symbol_name]
+            data = loader.load_data(symbol_code, str(start_date), str(end_date))
+            
+            if len(data) < 30:
+                st.warning("⚠️ 数据量太少，建议选择更长的时间范围（至少30个交易日）")
+            
+            config = BacktestConfig(initial_capital=initial_capital)
+            engine = BacktestEngine(config)
+            signals = strategy.generate_signals(data)
+            result = engine.run(data, signals)
+            perf = result.performance
+            
+            # 缓存到session_state
+            st.session_state.last_result = result
+            st.session_state.last_perf = perf
+            st.session_state.last_strategy = strategy_name
+            st.session_state.last_symbol = symbol_name
+            
+    except Exception as e:
+        st.error(f"❌ 回测失败: {str(e)}")
+        st.caption("如果问题持续，请检查参数设置或刷新页面重试")
 
 # ========== 展示结果 ==========
 if 'last_result' in st.session_state:
@@ -207,7 +228,7 @@ if 'last_result' in st.session_state:
         st.caption("自动扫描策略核心参数在不同取值下的表现，找到鲁棒性最强的参数区间")
         
         strategy = create_strategy(st.session_state.last_strategy)
-        default_params = strategy.get_default_parameters()
+        default_params = strategy.get_params_schema()
         
         if len(default_params) >= 1:
             # 选择要扫描的参数
@@ -244,8 +265,7 @@ if 'last_result' in st.session_state:
                     
                     for val in scan_values:
                         test_strategy = create_strategy(st.session_state.last_strategy)
-                        curr_params = {scan_param: val}
-                        test_strategy.set_parameters(curr_params)
+                        setattr(test_strategy, scan_param, val)
                         signals = test_strategy.generate_signals(data)
                         result = engine.run(data, signals)
                         perf = result.performance
@@ -421,6 +441,20 @@ else:
     with col3:
         st.markdown("**第三步**")
         st.caption("查看净值曲线和绩效分析")
+    
+    # 温馨提示
+    st.markdown("---")
+    st.markdown("### ⚠️ 使用提示")
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.caption("**数据范围**")
+        st.markdown("建议至少30个交易日以上的回测周期")
+    with col_b:
+        st.caption("**参数调整**")
+        st.markdown("不同标的的最优参数可能不同")
+    with col_c:
+        st.caption("**结果解读**")
+        st.markdown("回测结果仅供参考，不构成投资建议")
 
 st.markdown("---")
 st.caption("Rock Quant 2.0 - 顽岩量价模型")
