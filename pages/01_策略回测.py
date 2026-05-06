@@ -22,6 +22,10 @@ st.set_page_config(
 
 st.title("📈 策略回测")
 st.caption("单策略回测与深度绩效分析")
+
+# ========== 模拟数据警告 ==========
+st.warning("⚠️ 当前使用模拟数据进行演示，回测结果仅供参考，不构成投资建议。真实行情数据需对接 Tushare / Akshare。")
+
 st.markdown("---")
 
 # ========== 快速参数处理 ==========
@@ -31,8 +35,10 @@ preset_symbols = list(loader.preset_symbols.keys())
 all_strategies = get_all_strategies()
 
 default_strategy = 0
+auto_run = False  # 是否自动触发回测
 if 'quick_strategy' in st.session_state and st.session_state.quick_strategy in all_strategies:
     default_strategy = all_strategies.index(st.session_state.quick_strategy)
+    auto_run = True  # 从快速开始进来，自动回测
     
 default_symbol = 0
 if 'quick_symbol' in st.session_state and st.session_state.quick_symbol in preset_symbols:
@@ -87,7 +93,10 @@ with st.sidebar:
         setattr(strategy, param_name, param_value)
 
 # ========== 运行回测 ==========
-if st.button("🚀 开始回测", type="primary"):
+# 手动点击回测按钮 或 从快速开始自动触发
+run_triggered = st.button("🚀 开始回测", type="primary") or (auto_run and 'last_result' not in st.session_state)
+
+if run_triggered:
     try:
         with st.spinner("回测计算中..."):
             symbol_code = loader.preset_symbols[symbol_name]
@@ -107,6 +116,12 @@ if st.button("🚀 开始回测", type="primary"):
             st.session_state.last_perf = perf
             st.session_state.last_strategy = strategy_name
             st.session_state.last_symbol = symbol_name
+            st.session_state.start_date = start_date
+            st.session_state.end_date = end_date
+            st.session_state.initial_capital = initial_capital
+            # 清除自动回测标记，避免重复触发
+            if 'quick_strategy' in st.session_state:
+                del st.session_state['quick_strategy']
             
     except Exception as e:
         st.error(f"❌ 回测失败: {str(e)}")
@@ -255,9 +270,15 @@ if 'last_result' in st.session_state:
                     import numpy as np
                     scan_values = list(range(int(scan_start), int(scan_end) + 1, scan_step))
                     
-                    symbol_code = loader.preset_symbols[symbol_name]
-                    data = loader.load_data(symbol_code, str(start_date), str(end_date))
-                    config = BacktestConfig(initial_capital=initial_capital)
+                    # 从session_state读取回测参数，避免变量作用域问题
+                    scan_symbol = st.session_state.get('last_symbol', symbol_name)
+                    symbol_code = loader.preset_symbols[scan_symbol]
+                    s_date = st.session_state.get('start_date', start_date)
+                    e_date = st.session_state.get('end_date', end_date)
+                    capital = st.session_state.get('initial_capital', initial_capital)
+                    
+                    data = loader.load_data(symbol_code, str(s_date), str(e_date))
+                    config = BacktestConfig(initial_capital=capital)
                     engine = BacktestEngine(config)
                     
                     # 批量回测
@@ -283,41 +304,55 @@ if 'last_result' in st.session_state:
                     
                     df_scan = pd.DataFrame(scan_results)
                     
-                    # 绘制热力图数据
+                    # 绘制折线图（比单行热力图直观多了）
                     col1, col2 = st.columns([1, 1])
                     
                     with col1:
-                        st.markdown("#### 夏普比率热力图")
-                        fig_sharpe = go.Figure(data=go.Heatmap(
-                            z=[df_scan['夏普比率'].values],
-                            x=df_scan['参数值'].astype(str),
-                            y=['夏普比率'],
-                            colorscale='RdYlGn',
-                            zmid=df_scan['夏普比率'].mean(),
-                            text=[[f"{v:.2f}" for v in df_scan['夏普比率'].values]],
-                            texttemplate='%{text}',
-                            colorbar=dict(title='夏普比率')
+                        st.markdown("#### 夏普比率变化趋势")
+                        fig_sharpe = go.Figure()
+                        fig_sharpe.add_trace(go.Scatter(
+                            x=df_scan['参数值'],
+                            y=df_scan['夏普比率'],
+                            mode='lines+markers+text',
+                            text=df_scan['夏普比率'].round(2),
+                            textposition='top center',
+                            line=dict(color='#2ecc71', width=3),
+                            marker=dict(size=10)
                         ))
-                        fig_sharpe.update_layout(height=300)
+                        # 标记最大值
+                        best_s = df_scan.loc[df_scan['夏普比率'].idxmax()]
+                        fig_sharpe.add_annotation(
+                            x=best_s['参数值'], y=best_s['夏普比率'],
+                            text=f"最优: {best_s['夏普比率']:.2f}",
+                            showarrow=True, arrowhead=1, ax=0, ay=-40
+                        )
+                        fig_sharpe.update_layout(height=350, yaxis_title='夏普比率', xaxis_title=scan_param)
                         st.plotly_chart(fig_sharpe, use_container_width=True)
                     
                     with col2:
-                        st.markdown("#### 卡玛比率热力图")
-                        fig_calmar = go.Figure(data=go.Heatmap(
-                            z=[df_scan['卡玛比率'].values],
-                            x=df_scan['参数值'].astype(str),
-                            y=['卡玛比率'],
-                            colorscale='RdYlGn',
-                            zmid=df_scan['卡玛比率'].mean(),
-                            text=[[f"{v:.2f}" for v in df_scan['卡玛比率'].values]],
-                            texttemplate='%{text}',
-                            colorbar=dict(title='卡玛比率')
+                        st.markdown("#### 卡玛比率变化趋势")
+                        fig_calmar = go.Figure()
+                        fig_calmar.add_trace(go.Scatter(
+                            x=df_scan['参数值'],
+                            y=df_scan['卡玛比率'],
+                            mode='lines+markers+text',
+                            text=df_scan['卡玛比率'].round(2),
+                            textposition='top center',
+                            line=dict(color='#3498db', width=3),
+                            marker=dict(size=10)
                         ))
-                        fig_calmar.update_layout(height=300)
+                        # 标记最大值
+                        best_c = df_scan.loc[df_scan['卡玛比率'].idxmax()]
+                        fig_calmar.add_annotation(
+                            x=best_c['参数值'], y=best_c['卡玛比率'],
+                            text=f"最优: {best_c['卡玛比率']:.2f}",
+                            showarrow=True, arrowhead=1, ax=0, ay=-40
+                        )
+                        fig_calmar.update_layout(height=350, yaxis_title='卡玛比率', xaxis_title=scan_param)
                         st.plotly_chart(fig_calmar, use_container_width=True)
                     
                     # 收益回撤散点图
-                    st.markdown("#### 收益-回撤散点图")
+                    st.markdown("#### 收益-风险散点图")
                     fig_scatter = go.Figure()
                     for _, row in df_scan.iterrows():
                         fig_scatter.add_trace(go.Scatter(
