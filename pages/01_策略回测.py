@@ -202,7 +202,148 @@ if 'last_result' in st.session_state:
     
     st.markdown("---")
     
-    # ========== 4. 交易盈亏分布 ==========
+    # ========== 4. 参数敏感性分析（高级功能）
+    with st.expander("🔬 参数敏感性分析 - 扫描最优参数区间"):
+        st.caption("自动扫描策略核心参数在不同取值下的表现，找到鲁棒性最强的参数区间")
+        
+        strategy = create_strategy(st.session_state.last_strategy)
+        default_params = strategy.get_default_parameters()
+        
+        if len(default_params) >= 1:
+            # 选择要扫描的参数
+            param_names = list(default_params.keys())
+            scan_param = st.selectbox("选择要扫描的参数", param_names)
+            
+            # 获取参数范围
+            p_config = default_params[scan_param]
+            p_min = p_config.get('min', 5)
+            p_max = p_config.get('max', 200)
+            p_default = p_config.get('default', 20)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                scan_start = st.number_input("扫描起始值", value=p_min, min_value=p_min, max_value=p_max)
+            with col2:
+                scan_end = st.number_input("扫描结束值", value=min(p_max, p_max), min_value=p_min, max_value=p_max)
+            
+            scan_step = st.slider("扫描步长", 2, 20, 5)
+            
+            if st.button("开始参数扫描", type="primary"):
+                with st.spinner(f"正在扫描 {scan_param} 的参数敏感性..."):
+                    # 生成扫描参数列表
+                    import numpy as np
+                    scan_values = list(range(int(scan_start), int(scan_end) + 1, scan_step))
+                    
+                    symbol_code = loader.preset_symbols[symbol_name]
+                    data = loader.load_data(symbol_code, str(start_date), str(end_date))
+                    config = BacktestConfig(initial_capital=initial_capital)
+                    engine = BacktestEngine(config)
+                    
+                    # 批量回测
+                    scan_results = []
+                    
+                    for val in scan_values:
+                        test_strategy = create_strategy(st.session_state.last_strategy)
+                        curr_params = {scan_param: val}
+                        test_strategy.set_parameters(curr_params)
+                        signals = test_strategy.generate_signals(data)
+                        result = engine.run(data, signals)
+                        perf = result.performance
+                        
+                        scan_results.append({
+                            '参数值': val,
+                            '总收益率%': round(perf['总收益率'], 2),
+                            '年化收益率%': round(perf['年化收益率(CAGR)'], 2),
+                            '最大回撤%': round(perf['最大回撤'], 2),
+                            '夏普比率': round(perf['夏普比率'], 2),
+                            '卡玛比率': round(perf['卡玛比率'], 2),
+                            '胜率%': round(perf['胜率'], 1),
+                            '交易次数': perf['总交易次数']
+                        })
+                    
+                    df_scan = pd.DataFrame(scan_results)
+                    
+                    # 绘制热力图数据
+                    col1, col2 = st.columns([1, 1])
+                    
+                    with col1:
+                        st.markdown("#### 夏普比率热力图")
+                        fig_sharpe = go.Figure(data=go.Heatmap(
+                            z=[df_scan['夏普比率'].values],
+                            x=df_scan['参数值'].astype(str),
+                            y=['夏普比率'],
+                            colorscale='RdYlGn',
+                            zmid=df_scan['夏普比率'].mean(),
+                            text=[[f"{v:.2f}" for v in df_scan['夏普比率'].values]],
+                            texttemplate='%{text}',
+                            colorbar=dict(title='夏普比率')
+                        ))
+                        fig_sharpe.update_layout(height=300)
+                        st.plotly_chart(fig_sharpe, use_container_width=True)
+                    
+                    with col2:
+                        st.markdown("#### 卡玛比率热力图")
+                        fig_calmar = go.Figure(data=go.Heatmap(
+                            z=[df_scan['卡玛比率'].values],
+                            x=df_scan['参数值'].astype(str),
+                            y=['卡玛比率'],
+                            colorscale='RdYlGn',
+                            zmid=df_scan['卡玛比率'].mean(),
+                            text=[[f"{v:.2f}" for v in df_scan['卡玛比率'].values]],
+                            texttemplate='%{text}',
+                            colorbar=dict(title='卡玛比率')
+                        ))
+                        fig_calmar.update_layout(height=300)
+                        st.plotly_chart(fig_calmar, use_container_width=True)
+                    
+                    # 收益回撤散点图
+                    st.markdown("#### 收益-回撤散点图")
+                    fig_scatter = go.Figure()
+                    for _, row in df_scan.iterrows():
+                        fig_scatter.add_trace(go.Scatter(
+                            x=[row['最大回撤%']],
+                            y=[row['年化收益率%']],
+                            mode='markers+text',
+                            marker=dict(size=abs(row['夏普比率'])*5+8, color='RoyalBlue'),
+                            text=str(row['参数值']),
+                            textposition='top center',
+                            name=f"参数={row['参数值']}",
+                            hovertemplate=f"参数={row['参数值']}<br>年化={row['年化收益率%']:.1f}%<br>回撤={row['最大回撤%']:.1f}%<br>夏普={row['夏普比率']:.2f}"
+                        ))
+                    
+                    fig_scatter.update_layout(
+                        height=400,
+                        xaxis_title='最大回撤 (%)',
+                        yaxis_title='年化收益率 (%)',
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    
+                    # 详细结果表
+                    st.markdown("#### 详细扫描结果")
+                    st.dataframe(df_scan, use_container_width=True, hide_index=True)
+                    
+                    # 最优参数建议
+                    best_sharpe = df_scan.loc[df_scan['夏普比率'].idxmax()]
+                    best_calmar = df_scan.loc[df_scan['卡玛比率'].idxmax()]
+                    best_return = df_scan.loc[df_scan['年化收益率%'].idxmax()]
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.success(f"🏆 最优夏普参数: {scan_param}={best_sharpe['参数值']}")
+                        st.caption(f"夏普 {best_sharpe['夏普比率']:.2f} | 年化 {best_sharpe['年化收益率%']:.1f}%")
+                    with col2:
+                        st.success(f"⚖️ 最优卡玛参数: {scan_param}={best_calmar['参数值']}")
+                        st.caption(f"卡玛 {best_calmar['卡玛比率']:.2f} | 回撤 {best_calmar['最大回撤%']:.1f}%")
+                    with col3:
+                        st.success(f"📈 最优收益参数: {scan_param}={best_return['参数值']}")
+                        st.caption(f"年化 {best_return['年化收益率%']:.1f}% | 胜率 {best_return['胜率%']:.1f}%")
+        else:
+            st.info("该策略无可配置的参数，无法进行敏感性分析")
+    
+    st.markdown("---")
+    
+    # ========== 5. 交易盈亏分布 ==========
     st.subheader("💰 交易盈亏分析")
     
     trades = result.trades
