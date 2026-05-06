@@ -1,0 +1,285 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from config import BacktestConfig
+from backtest_engine import BacktestEngine
+from strategies import get_all_strategies, create_strategy
+from data_loader import DataLoader
+
+st.set_page_config(
+    page_title="策略回测 - Rock Quant",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.title("📈 策略回测")
+st.caption("单策略回测与深度绩效分析")
+st.markdown("---")
+
+# ========== 侧边栏参数配置 ==========
+with st.sidebar:
+    st.header("回测参数")
+    
+    strategy_name = st.selectbox("选择策略", get_all_strategies(), key="strategy_name")
+    
+    loader = DataLoader()
+    preset_symbols = list(loader.preset_symbols.keys())
+    symbol_name = st.selectbox("选择标的", preset_symbols, key="symbol_name")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("开始日期", pd.to_datetime("2020-01-01"), key="start_date")
+    with col2:
+        end_date = st.date_input("结束日期", pd.to_datetime("2023-12-31"), key="end_date")
+    
+    st.subheader("资金配置")
+    initial_capital = st.number_input("初始资金", value=1000000, step=100000, key="initial_capital")
+    
+    # 策略参数动态生成
+    st.subheader("策略参数")
+    strategy = create_strategy(strategy_name)
+    strategy_params = {}
+    
+    for param_name, param_config in strategy.get_default_parameters().items():
+        param_type = param_config.get('type', 'int')
+        param_default = param_config.get('default', 20)
+        param_min = param_config.get('min', 1)
+        param_max = param_config.get('max', 200)
+        
+        if param_type == 'int':
+            strategy_params[param_name] = st.slider(
+                param_name, 
+                min_value=param_min, 
+                max_value=param_max, 
+                value=param_default,
+                key=f"param_{param_name}"
+            )
+        elif param_type == 'float':
+            strategy_params[param_name] = st.slider(
+                param_name, 
+                min_value=float(param_min), 
+                max_value=float(param_max), 
+                value=float(param_default),
+                key=f"param_{param_name}"
+            )
+    
+    # 更新策略参数
+    strategy.set_parameters(strategy_params)
+
+# ========== 运行回测 ==========
+if st.button("🚀 开始回测", type="primary"):
+    with st.spinner("回测计算中..."):
+        symbol_code = loader.preset_symbols[symbol_name]
+        data = loader.load_data(symbol_code, str(start_date), str(end_date))
+        config = BacktestConfig(initial_capital=initial_capital)
+        engine = BacktestEngine(config)
+        signals = strategy.generate_signals(data)
+        result = engine.run(data, signals)
+        perf = result.performance
+        
+        # 缓存到session_state
+        st.session_state.last_result = result
+        st.session_state.last_perf = perf
+        st.session_state.last_strategy = strategy_name
+        st.session_state.last_symbol = symbol_name
+
+# ========== 展示结果 ==========
+if 'last_result' in st.session_state:
+    result = st.session_state.last_result
+    perf = st.session_state.last_perf
+    
+    st.success(f"回测完成 - {st.session_state.last_strategy} @ {st.session_state.last_symbol}")
+    st.markdown("---")
+    
+    # ========== 1. 核心绩效卡片 ==========
+    st.subheader("📊 核心绩效指标")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("总收益率", f"{perf['总收益率']:.2f}%")
+        st.metric("年化收益率", f"{perf['年化收益率(CAGR)']:.2f}%")
+    with col2:
+        st.metric("最大回撤", f"{perf['最大回撤']:.2f}%", delta_color="inverse")
+        st.metric("卡玛比率", f"{perf['卡玛比率']:.2f}")
+    with col3:
+        st.metric("夏普比率", f"{perf['夏普比率']:.2f}")
+        st.metric("索提诺比率", f"{perf['索提诺比率']:.2f}")
+    with col4:
+        st.metric("交易次数", perf['总交易次数'])
+        st.metric("胜率", f"{perf['胜率']:.1f}%")
+    
+    st.markdown("---")
+    
+    # ========== 2. 净值曲线 ==========
+    st.subheader("📈 净值曲线")
+    
+    fig_equity = go.Figure()
+    fig_equity.add_trace(go.Scatter(
+        x=result.equity_curve.index, 
+        y=result.equity_curve.values, 
+        name="策略净值", 
+        line=dict(color="#1f77b4", width=2)
+    ))
+    
+    # 添加回撤
+    fig_equity.add_trace(go.Scatter(
+        x=result.drawdown_curve.index,
+        y=result.drawdown_curve.values * 100,
+        name="回撤(%)",
+        line=dict(color="#ff7f0e", width=1),
+        yaxis="y2"
+    ))
+    
+    fig_equity.update_layout(
+        height=450,
+        hovermode="x unified",
+        yaxis_title="净值",
+        yaxis2=dict(title="回撤(%)", overlaying="y", side="right", range=[-100, 0]),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    st.plotly_chart(fig_equity, use_container_width=True)
+    st.markdown("---")
+    
+    # ========== 3. 月度收益率热力图 ==========
+    st.subheader("🗓️ 月度收益率热力图")
+    
+    equity_daily = result.equity_curve
+    monthly_equity = equity_daily.resample('M').last()
+    monthly_returns = monthly_equity.pct_change().dropna() * 100
+    
+    monthly_data = []
+    for date, ret in monthly_returns.items():
+        monthly_data.append({
+            'year': date.year,
+            'month': date.month,
+            'return': round(ret, 2)
+        })
+    
+    df_monthly = pd.DataFrame(monthly_data)
+    pivot_data = df_monthly.pivot(index='year', columns='month', values='return')
+    pivot_data.columns = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+    
+    fig_heatmap = go.Figure(data=go.Heatmap(
+        z=pivot_data.values,
+        x=pivot_data.columns,
+        y=pivot_data.index.astype(str),
+        colorscale='RdYlGn',
+        zmid=0,
+        text=[[f"{v:.2f}%" for v in row] for row in pivot_data.values],
+        texttemplate='%{text}',
+        textfont={"size": 11},
+        showscale=True,
+        colorbar=dict(title="收益率%")
+    ))
+    
+    fig_heatmap.update_layout(height=400)
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+    
+    # 月度统计
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        best_month = df_monthly.loc[df_monthly['return'].idxmax()]
+        st.metric("历史最佳单月", f"{best_month['return']:.2f}%", 
+                 f"{int(best_month['year'])}年{int(best_month['month'])}月")
+    with col2:
+        worst_month = df_monthly.loc[df_monthly['return'].idxmin()]
+        st.metric("历史最差单月", f"{worst_month['return']:.2f}%",
+                 f"{int(worst_month['year'])}年{int(worst_month['month'])}月", delta_color="inverse")
+    with col3:
+        positive_months = len(df_monthly[df_monthly['return'] > 0])
+        total_months = len(df_monthly)
+        st.metric("月度胜率", f"{positive_months/total_months*100:.1f}%",
+                 f"{positive_months}/{total_months}个月")
+    
+    st.markdown("---")
+    
+    # ========== 4. 交易盈亏分布 ==========
+    st.subheader("💰 交易盈亏分析")
+    
+    trades = result.trades
+    if len(trades) > 0:
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            # 盈亏分布直方图
+            fig_hist = go.Figure()
+            wins = trades[trades['return_pct'] > 0]['return_pct']
+            losses = trades[trades['return_pct'] < 0]['return_pct']
+            
+            fig_hist.add_trace(go.Histogram(
+                x=wins, name='盈利交易', marker_color='#2ecc71', opacity=0.7, nbinsx=20
+            ))
+            fig_hist.add_trace(go.Histogram(
+                x=losses, name='亏损交易', marker_color='#e74c3c', opacity=0.7, nbinsx=20
+            ))
+            
+            fig_hist.update_layout(
+                title='单笔交易收益率分布',
+                height=350,
+                xaxis_title='收益率%',
+                yaxis_title='交易数量',
+                barmode='overlay',
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            
+            st.plotly_chart(fig_hist, use_container_width=True)
+        
+        with col2:
+            # 交易统计表格
+            st.markdown("#### 交易统计")
+            
+            avg_win = wins.mean() if len(wins) > 0 else 0
+            avg_loss = losses.mean() if len(losses) > 0 else 0
+            
+            stats_data = [
+                ["平均单笔盈利", f"{avg_win:.2f}%"],
+                ["平均单笔亏损", f"{avg_loss:.2f}%"],
+                ["盈亏比", f"{abs(avg_win/avg_loss) if avg_loss != 0 else 0:.2f}"],
+                ["单笔最大盈利", f"{trades['return_pct'].max():.2f}%"],
+                ["单笔最大亏损", f"{trades['return_pct'].min():.2f}%"],
+                ["盈利交易数", len(wins)],
+                ["亏损交易数", len(losses)],
+            ]
+            
+            df_stats = pd.DataFrame(stats_data, columns=["指标", "数值"])
+            st.dataframe(df_stats, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        
+        # ========== 5. 交易明细 ==========
+        with st.expander("查看详细交易记录"):
+            trades_display = trades.copy()
+            trades_display['entry_date'] = pd.to_datetime(trades_display['entry_date']).dt.strftime('%Y-%m-%d')
+            trades_display['exit_date'] = pd.to_datetime(trades_display['exit_date']).dt.strftime('%Y-%m-%d')
+            trades_display = trades_display[['entry_date', 'exit_date', 'entry_price', 'exit_price', 'position', 'return_pct', 'pnl']]
+            trades_display.columns = ['入场日期', '出场日期', '入场价', '出场价', '仓位', '收益率%', '盈亏金额']
+            st.dataframe(trades_display, use_container_width=True)
+
+else:
+    # 未回测时显示引导
+    st.info("👈 请在左侧配置回测参数，点击「开始回测」按钮")
+    
+    # 快速示例
+    st.markdown("### 💡 快速上手")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**第一步**")
+        st.caption("选择策略和标的，调整参数")
+    with col2:
+        st.markdown("**第二步**")
+        st.caption("点击「开始回测」运行计算")
+    with col3:
+        st.markdown("**第三步**")
+        st.caption("查看净值曲线和绩效分析")
+
+st.markdown("---")
+st.caption("Rock Quant 2.0 - 顽岩量价模型")

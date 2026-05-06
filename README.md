@@ -4,7 +4,7 @@
 
 ## ✨ 核心特性
 
-- **10+经典量价策略预设**：双均线、MACD、RSI、布林带、OBV能量潮、动量策略等
+- **20+经典量价策略预设**：双均线、MACD、RSI、布林带、OBV能量潮、KDJ、CCI、WR、ROC、BIAS、DMA、TRIX、均线多头发散、肯特纳通道、成交量突破、VR、DMI、动量策略等
 - **全向量化回测引擎**：移除所有Python循环，速度提升5-10倍
 - **20+专业绩效指标**：夏普、卡玛、索提诺、最大回撤、胜率、盈亏比、VAR/CVAR完整计算
 - **可视化参数敏感性分析**：双参数热力图，自动标注最优参数区间
@@ -27,8 +27,10 @@ pip install pandas numpy streamlit plotly pyyaml pydantic scipy
 
 ```bash
 cd RockQuant
-streamlit run app.py
+streamlit run Home.py
 ```
+
+> 注意：主入口文件是 Home.py（原 主页.py），不是 app.py
 
 ### 3. 三步完成回测
 
@@ -51,7 +53,7 @@ RockQuant/
 ├── config/                  # 策略配置保存目录
 ├── docs/                    # 文档目录
 ├── tests/                   # 测试用例
-├── app.py                   # Streamlit主应用
+├── Home.py                  # Streamlit主应用（原 主页.py）
 ├── pyproject.toml           # 项目配置与依赖
 └── README.md                # 项目说明
 ```
