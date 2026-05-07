@@ -28,8 +28,42 @@ all_strategies = get_all_strategies()
 st.title("📈 策略回测")
 st.caption("单策略回测与深度绩效分析")
 
-# ========== 模拟数据警告 ==========
-st.warning("⚠️ 当前使用模拟数据进行演示，回测结果仅供参考，不构成投资建议。真实行情数据需对接 Tushare / Akshare。")
+# ========== 数据源选择 ==========
+col_data1, col_data2 = st.columns([3, 1])
+with col_data1:
+    data_sources = [
+        ("模拟数据", "simulated"),
+        ("Akshare 免费实盘数据", "akshare"),
+        ("Tushare 专业数据", "tushare"),
+    ]
+    source_labels = [s[0] for s in data_sources]
+    source_codes = [s[1] for s in data_sources]
+    
+    default_source_idx = source_codes.index(st.session_state.get('data_source', 'simulated')) if st.session_state.get('data_source', 'simulated') in source_codes else 0
+    selected_source_label = st.selectbox("选择数据源", source_labels, index=default_source_idx, key="data_source_select")
+    selected_source = source_codes[source_labels.index(selected_source_label)]
+    st.session_state['data_source'] = selected_source
+    
+    # Tushare Token输入
+    if selected_source == 'tushare':
+        tushare_token = st.text_input("Tushare Token", type="password", 
+                                      value=st.session_state.get('tushare_token', ''),
+                                      help="请输入您的 Tushare Token，可在 https://tushare.pro/user/token 获取")
+        st.session_state['tushare_token'] = tushare_token
+        loader.set_tushare_token(tushare_token)
+    
+    loader.set_data_source(selected_source)
+    
+    # 检查数据源可用性
+    available, msg = loader.check_data_source_available(selected_source)
+    if not available:
+        st.warning(f"⚠️ {msg}")
+    elif selected_source == 'simulated':
+        st.info("ℹ️ 当前使用模拟数据进行演示，真实数据可选择 Akshare 或 Tushare")
+    else:
+        st.success(f"✅ 数据源已切换至 {selected_source_label}")
+    
+    st.markdown("---")
 
 st.markdown("---")
 
@@ -107,7 +141,13 @@ if run_triggered:
                     del st.session_state['quick_strategy']
             
             symbol_code = loader.preset_symbols[symbol_name]
-            data = loader.load_data(symbol_code, str(start_date), str(end_date))
+            try:
+                data = loader.load_data(symbol_code, str(start_date), str(end_date), data_source=selected_source)
+            except Exception as e:
+                st.error(f"数据加载失败: {str(e)}")
+                if selected_source == 'akshare':
+                    st.info("提示：Akshare 部分指数数据可能无法获取，建议先使用模拟数据测试")
+                st.stop()
             
             if len(data) < 30:
                 st.warning("⚠️ 数据量太少，建议选择更长的时间范围（至少30个交易日）")

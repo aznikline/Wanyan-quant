@@ -11,3 +11,7 @@ jinja2>=3.1.0
 # PDF报告导出
 reportlab>=4.0.0
 matplotlib>=3.5.0
+
+# 实盘数据接入
+akshare>=1.10.0 # 可选，免费开源数据源
+tushare>=1.2.89 # 可选，专业数据源
