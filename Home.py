@@ -209,4 +209,4 @@ for item in progress_data:
         st.markdown(f"{item['进度']}%")
 
 st.markdown("---")
-st.caption("Rock Quant 2.1.2 - 顽岩量价模型 | 完整开源 | 所有回测结果基于A股历史数据")
+st.caption("Rock Quant 2.2.0 - 顽岩量价模型 | 完整开源 | 支持专业PDF报告导出 | 所有回测结果基于A股历史数据")

@@ -147,6 +147,50 @@ if 'last_result' in st.session_state:
     current_symbol = st.session_state.last_symbol
     
     st.success(f"回测完成 - {current_strategy} @ {current_symbol}")
+    
+    # ========== PDF导出按钮 ==========
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("📄 导出专业PDF报告", type="secondary", use_container_width=True):
+            with st.spinner("正在生成专业PDF报告，请稍候..."):
+                try:
+                    from src.pdf_generator import PDFReportGenerator
+                    
+                    pdf_gen = PDFReportGenerator()
+                    missing = pdf_gen.check_dependencies()
+                    if missing:
+                        st.error(f"缺少依赖库: {', '.join(missing)}")
+                        st.code(f"pip install {' '.join(missing)}", language="bash")
+                    else:
+                        pdf_buffer = pdf_gen.generate_report(
+                            result=result,
+                            strategy_name=current_strategy,
+                            symbol_name=current_symbol,
+                            start_date=str(st.session_state.start_date),
+                            end_date=str(st.session_state.end_date),
+                            initial_capital=st.session_state.initial_capital,
+                            perf=perf
+                        )
+                        
+                        # 生成文件名
+                        filename = f"{current_strategy}_{current_symbol}_{st.session_state.start_date}_{st.session_state.end_date}_回测报告.pdf"
+                        filename = filename.replace(' ', '_').replace('/', '')
+                        
+                        st.success("✅ PDF报告生成成功！")
+                        
+                        # 提供下载按钮
+                        st.download_button(
+                            label="⬇️ 点击下载PDF报告",
+                            data=pdf_buffer,
+                            file_name=filename,
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True
+                        )
+                except Exception as e:
+                    st.error(f"报告生成失败: {str(e)}")
+                    st.caption("请检查控制台输出或联系技术支持")
+    
     st.markdown("---")
     
     # ========== 1. 核心绩效卡片 ==========

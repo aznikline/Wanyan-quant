@@ -1,4 +1,4 @@
-# Rock Quant 2.1.1 - 顽岩量价模型
+# Rock Quant 2.2.0 - 顽岩量价模型
 
 面向个人量化交易者的轻量级量价策略验证平台
 
@@ -16,14 +16,17 @@
 - **策略深度百科知识库**：每个策略7维度详解（发明者、原理、公式、适用场景、A股实盘经验、常见陷阱、改进方向）
 - **策略选型矩阵指南**：6种市场状态下的策略适配指南
 - **Streamlit现代化界面**：响应式设计，交互流畅
+- **专业PDF报告导出**：一键生成完整回测报告，包含绩效指标、净值曲线、月度热力图、风险分析等6大模块
 
 ## 🚀 快速开始
 
 ### 1. 安装依赖
 
 ```bash
-pip install pandas numpy streamlit plotly pydantic scipy
+pip install pandas numpy streamlit plotly pydantic scipy reportlab matplotlib
 ```
+
+> PDF报告导出功能需要额外安装 `reportlab` 和 `matplotlib`
 
 ### 2. 启动应用
 
