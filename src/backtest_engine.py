@@ -4,8 +4,8 @@ from typing import Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from config import BacktestConfig, RiskControlConfig, PositionConfig
-from performance import PerformanceCalculator
+from .config import BacktestConfig, RiskControlConfig, PositionConfig
+from .performance import PerformanceCalculator
 
 
 @dataclass
