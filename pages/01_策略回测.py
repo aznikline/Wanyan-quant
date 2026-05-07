@@ -194,7 +194,7 @@ if 'last_result' in st.session_state:
         if st.button("📄 导出专业PDF报告", type="secondary", use_container_width=True):
             with st.spinner("正在生成专业PDF报告，请稍候..."):
                 try:
-                    from src.pdf_generator import PDFReportGenerator
+                    from pdf_generator import PDFReportGenerator
                     
                     pdf_gen = PDFReportGenerator()
                     missing = pdf_gen.check_dependencies()

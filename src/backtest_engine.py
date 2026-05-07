@@ -4,8 +4,12 @@ from typing import Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 
-from .config import BacktestConfig, RiskControlConfig, PositionConfig
-from .performance import PerformanceCalculator
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from config import BacktestConfig, RiskControlConfig, PositionConfig
+from performance import PerformanceCalculator
 
 
 @dataclass
