@@ -110,7 +110,7 @@ with st.sidebar:
         key = f"param_{strategy_name}_{param_name}"
         
         if param_type == 'int':
-            st.session_state[key] = st.slider(
+            st.session_state[f"value_{key}"] = st.slider(
                 param_name, 
                 min_value=param_min, 
                 max_value=param_max, 
@@ -118,7 +118,7 @@ with st.sidebar:
                 key=key
             )
         elif param_type == 'float':
-            st.session_state[key] = st.slider(
+            st.session_state[f"value_{key}"] = st.slider(
                 param_name, 
                 min_value=float(param_min), 
                 max_value=float(param_max), 
@@ -160,7 +160,7 @@ if run_triggered:
             for param_name in param_schema.keys():
                 key = f"param_{strategy_name}_{param_name}"
                 if key in st.session_state:
-                    setattr(strategy, param_name, st.session_state[key])
+                    setattr(strategy, param_name, st.session_state[f"value_{key}"])
             
             signals = strategy.generate_signals(data)
             result = engine.run(data, signals)
