@@ -14,7 +14,7 @@ st.markdown("---")
 
 # ========== 侧边栏引导
 with st.sidebar:
-    st.success("👈 选择上方页面进入对应功能")
+
     st.markdown("---")
     st.markdown("### 快速导航")
     st.markdown("- **策略回测**：单策略深度回测与绩效分析")
