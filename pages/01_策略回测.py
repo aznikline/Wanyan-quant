@@ -73,6 +73,16 @@ default_strategy = 0
 default_symbol = 0
 auto_run = False
 
+# 处理快速开始日期参数
+import datetime as dt
+default_start = pd.to_datetime("2020-01-01")
+default_end = pd.to_datetime("2023-12-31")
+
+if 'quick_start_date' in st.session_state:
+    default_start = pd.to_datetime(st.session_state.quick_start_date)
+if 'quick_end_date' in st.session_state:
+    default_end = pd.to_datetime(st.session_state.quick_end_date)
+
 if 'quick_strategy' in st.session_state and st.session_state.quick_strategy in all_strategies:
     default_strategy = all_strategies.index(st.session_state.quick_strategy)
     auto_run = True  # 从快速开始进来，自动回测
@@ -89,9 +99,9 @@ with st.sidebar:
     
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("开始日期", pd.to_datetime("2020-01-01"), key="start_date")
+        start_date = st.date_input("开始日期", default_start, key="start_date")
     with col2:
-        end_date = st.date_input("结束日期", pd.to_datetime("2023-12-31"), key="end_date")
+        end_date = st.date_input("结束日期", default_end, key="end_date")
     
     st.subheader("资金配置")
     initial_capital = st.number_input("初始资金", value=1000000, step=100000, key="initial_capital")
@@ -188,6 +198,102 @@ if 'last_result' in st.session_state:
     
     st.success(f"回测完成 - {current_strategy} @ {current_symbol}")
     
+    # ========== 核心结论指标（第一层） ==========
+    st.subheader("核心结论")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # 指标评估颜色
+    annual_return = perf['年化收益率(CAGR)']
+    max_drawdown = perf['最大回撤']
+    win_rate = perf['胜率']
+    
+    def get_return_status(val):
+        if val > 20: return ("🟢", "优秀")
+        elif val > 15: return ("🟡", "良好")
+        elif val > 10: return ("🟡", "一般")
+        else: return ("🔴", "较差")
+    
+    def get_drawdown_status(val):
+        if val < 15: return ("🟢", "优秀")
+        elif val < 25: return ("🟡", "良好")
+        elif val < 35: return ("🟡", "一般")
+        else: return ("🔴", "较差")
+    
+    def get_winrate_status(val):
+        if val > 55: return ("🟢", "优秀")
+        elif val > 50: return ("🟡", "良好")
+        elif val > 40: return ("🟡", "一般")
+        else: return ("🔴", "较差")
+    
+    with col1:
+        status_icon, status_text = get_return_status(annual_return)
+        st.metric("年化收益率", f"{annual_return:.2f}%")
+        st.caption(f"{status_icon} {status_text}")
+    
+    with col2:
+        status_icon, status_text = get_drawdown_status(max_drawdown)
+        st.metric("最大回撤", f"{max_drawdown:.2f}%")
+        st.caption(f"{status_icon} {status_text}")
+    
+    with col3:
+        status_icon, status_text = get_winrate_status(win_rate)
+        st.metric("胜率", f"{win_rate:.1f}%")
+        st.caption(f"{status_icon} {status_text}")
+    
+    st.markdown("---")
+    
+    # ========== 第二层：净值曲线和交易记录 ==========
+    st.subheader("净值曲线")
+    
+    fig_equity = go.Figure()
+    fig_equity.add_trace(go.Scatter(
+        x=result.equity_curve.index, 
+        y=result.equity_curve.values, 
+        name="策略净值", 
+        line=dict(color="#1f77b4", width=2)
+    ))
+    
+    # 添加回撤
+    fig_equity.add_trace(go.Scatter(
+        x=result.drawdown_curve.index,
+        y=result.drawdown_curve.values * 100,
+        name="回撤(%)",
+        line=dict(color="#ff7f0e", width=1),
+        yaxis="y2"
+    ))
+    
+    fig_equity.update_layout(
+        height=400,
+        hovermode="x unified",
+        yaxis_title="净值",
+        yaxis2=dict(title="回撤(%)", overlaying="y", side="right", range=[-100, 0]),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    st.plotly_chart(fig_equity, use_container_width=True)
+    
+    # 最近5笔交易
+    st.subheader("最近交易")
+    if len(result.trades) > 0:
+        recent_trades = pd.DataFrame(result.trades).tail().sort_values('entry_date', ascending=False)
+        recent_trades_display = recent_trades[['entry_date', 'exit_date', 'entry_price', 'exit_price', 'return_pct']].copy()
+        recent_trades_display.columns = ['进场日期', '离场日期', '进场价', '离场价', '收益率%']
+        st.dataframe(recent_trades_display, use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    
+    # ========== 详细分析展开按钮 ==========
+    if 'show_detail' not in st.session_state:
+        st.session_state.show_detail = False
+    
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        detail_label = "收起详细分析" if st.session_state.show_detail else "展开详细分析"
+        if st.button(detail_label, use_container_width=True):
+            st.session_state.show_detail = not st.session_state.show_detail
+            st.rerun()
+    
     # ========== PDF导出按钮 ==========
     col1, col2 = st.columns([3, 1])
     with col2:
@@ -231,56 +337,23 @@ if 'last_result' in st.session_state:
                     st.error(f"报告生成失败: {str(e)}")
                     st.caption("请检查控制台输出或联系技术支持")
     
-    st.markdown("---")
-    
-    # ========== 1. 核心绩效卡片 ==========
-    st.subheader(" 核心绩效指标")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("总收益率", f"{perf['总收益率']:.2f}%")
-        st.metric("年化收益率", f"{perf['年化收益率(CAGR)']:.2f}%")
-    with col2:
-        st.metric("最大回撤", f"{perf['最大回撤']:.2f}%", delta_color="inverse")
-        st.metric("卡玛比率", f"{perf['卡玛比率']:.2f}")
-    with col3:
-        st.metric("夏普比率", f"{perf['夏普比率']:.2f}")
-        st.metric("索提诺比率", f"{perf['索提诺比率']:.2f}")
-    with col4:
-        st.metric("交易次数", perf['总交易次数'])
-        st.metric("胜率", f"{perf['胜率']:.1f}%")
-    
-    st.markdown("---")
-    
-    # ========== 2. 净值曲线 ==========
-    st.subheader(" 净值曲线")
-    
-    fig_equity = go.Figure()
-    fig_equity.add_trace(go.Scatter(
-        x=result.equity_curve.index, 
-        y=result.equity_curve.values, 
-        name="策略净值", 
-        line=dict(color="#1f77b4", width=2)
-    ))
-    
-    # 添加回撤
-    fig_equity.add_trace(go.Scatter(
-        x=result.drawdown_curve.index,
-        y=result.drawdown_curve.values * 100,
-        name="回撤(%)",
-        line=dict(color="#ff7f0e", width=1),
-        yaxis="y2"
-    ))
-    
-    fig_equity.update_layout(
-        height=450,
-        hovermode="x unified",
-        yaxis_title="净值",
-        yaxis2=dict(title="回撤(%)", overlaying="y", side="right", range=[-100, 0]),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    
-    st.plotly_chart(fig_equity, use_container_width=True)
+    # ========== 详细分析内容（第三层） ==========
+    if st.session_state.show_detail:
+        st.markdown("---")
+        st.subheader("详细分析")
+        
+        # 完整绩效指标
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("总收益率", f"{perf['总收益率']:.2f}%")
+        with col2:
+            st.metric("卡玛比率", f"{perf['卡玛比率']:.2f}")
+        with col3:
+            st.metric("夏普比率", f"{perf['夏普比率']:.2f}")
+        with col4:
+            st.metric("交易次数", perf['总交易次数'])
+        
+        # 完整的月度热力图和其他分析（从下面移上来）
     st.markdown("---")
     
     # ========== 3. 月度收益率热力图 ==========

@@ -1,137 +1,233 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+from pathlib import Path
+import sys
+from datetime import datetime, timedelta
+
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 st.set_page_config(
-    page_title="Rock Quant 2.0 - 顽岩量价模型",
+    page_title="Rock Quant 2.4 - 顽岩量价模型",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title(" Rock Quant 2.0")
+st.title("Rock Quant 2.4")
 st.markdown("## 顽岩量价模型量化回测平台")
 st.markdown("---")
 
-# ========== 侧边栏引导
-with st.sidebar:
+# ========== 配置 - 标的列表 ==========
+PRESET_SYMBOLS = [
+    {"name": "沪深300", "code": "000300.SH", "tag": "推荐"},
+    {"name": "中证500", "code": "000905.SH", "tag": ""},
+    {"name": "创业板指", "code": "399006.SZ", "tag": ""},
+    {"name": "上证指数", "code": "000001.SH", "tag": ""},
+    {"name": "贵州茅台", "code": "600519.SH", "tag": ""},
+    {"name": "宁德时代", "code": "300750.SZ", "tag": ""},
+    {"name": "比亚迪", "code": "002594.SZ", "tag": ""},
+]
 
+# ========== 配置 - 策略场景分组 ==========
+STRATEGY_SCENARIOS = {
+    "稳健型": {
+        "strategies": ["双均线策略", "布林带突破策略"],
+        "description": "低回撤，适合新手和定投",
+        "color": "green"
+    },
+    "趋势型": {
+        "strategies": ["MACD策略", "DMA平均线差策略", "TRIX三重指数策略"],
+        "description": "高收益，适合趋势行情",
+        "color": "blue"
+    },
+    "震荡型": {
+        "strategies": ["RSI超买超卖策略", "KDJ随机指标策略", "CCI顺势指标策略"],
+        "description": "波段操作，适合震荡市场",
+        "color": "orange"
+    },
+    "量价型": {
+        "strategies": ["OBV能量潮策略", "VR容量比率策略", "成交量突破策略"],
+        "description": "量价配合，捕捉资金动向",
+        "color": "purple"
+    }
+}
+
+# ========== 侧边栏引导 ==========
+with st.sidebar:
     st.markdown("---")
     st.markdown("### 快速导航")
     st.markdown("- **策略回测**：单策略深度回测与绩效分析")
     st.markdown("- **批量分析**：多策略对比、多标的回测、组合优化")
     st.markdown("- **策略百科**：20个策略完整文档与实盘经验")
+    st.markdown("---")
+    st.caption("v2.4.0 | 体验优化版")
 
-# ==========  快速开始区
-st.markdown("###  快速开始 - 一键回测")
+# ========== 3步快速开始区 ==========
+st.markdown("### 🚀 3步完成第一次回测")
 
+# 第1步：选择标的
+st.markdown("#### 第1步：选择标的")
+col1, col2, col3, col4 = st.columns(4)
+symbols_col = [col1, col2, col3, col4]
+
+if 'selected_symbol' not in st.session_state:
+    st.session_state.selected_symbol = "沪深300"
+
+for idx, symbol in enumerate(PRESET_SYMBOLS[:4]):
+    with symbols_col[idx]:
+        is_selected = st.session_state.selected_symbol == symbol['name']
+        btn_type = "primary" if is_selected else "secondary"
+        if st.button(f"{symbol['name']}\n{symbol['tag']}", key=f"sym_{idx}", use_container_width=True, type=btn_type):
+            st.session_state.selected_symbol = symbol['name']
+            st.rerun()
+
+col1, col2, col3 = st.columns(3)
+for idx, symbol in enumerate(PRESET_SYMBOLS[4:]):
+    with [col1, col2, col3][idx]:
+        is_selected = st.session_state.selected_symbol == symbol['name']
+        btn_type = "primary" if is_selected else "secondary"
+        if st.button(f"{symbol['name']}", key=f"sym_more_{idx}", use_container_width=True, type=btn_type):
+            st.session_state.selected_symbol = symbol['name']
+            st.rerun()
+
+st.caption(f"已选择：{st.session_state.selected_symbol}")
+st.markdown("---")
+
+# 第2步：选择策略
+st.markdown("#### 第2步：选择策略")
+
+if 'selected_strategy' not in st.session_state:
+    st.session_state.selected_strategy = "双均线策略"
+
+col1, col2 = st.columns(2)
+with col1:
+    # 场景选择
+    scene_list = list(STRATEGY_SCENARIOS.keys())
+    if 'selected_scene' not in st.session_state:
+        st.session_state.selected_scene = "稳健型"
+
+    for idx, (scene, config) in enumerate(STRATEGY_SCENARIOS.items()):
+        is_selected = st.session_state.selected_scene == scene
+        btn_type = "primary" if is_selected else "secondary"
+        if st.button(f"{scene}\n{config['description']}", key=f"scene_{idx}", use_container_width=True, type=btn_type):
+            st.session_state.selected_scene = scene
+            # 自动选中该场景第一个策略
+            first_strategy = config['strategies'][0]
+            st.session_state.selected_strategy = first_strategy
+            st.rerun()
+
+with col2:
+    # 该场景下的策略列表
+    current_scene_config = STRATEGY_SCENARIOS[st.session_state.selected_scene]
+    st.markdown(f"**{st.session_state.selected_scene}** 策略列表：")
+    for idx, strategy_name in enumerate(current_scene_config['strategies']):
+        is_selected = st.session_state.selected_strategy == strategy_name
+        btn_type = "primary" if is_selected else "secondary"
+        if st.button(strategy_name, key=f"strat_{idx}", use_container_width=True, type=btn_type):
+            st.session_state.selected_strategy = strategy_name
+            st.rerun()
+
+st.caption(f"已选择策略：{st.session_state.selected_strategy}")
+st.markdown("---")
+
+# 第3步：选择时间范围
+st.markdown("#### 第3步：选择时间范围")
 col1, col2, col3, col4 = st.columns(4)
 
-quick_presets = [
-    {
-        "name": "双均线策略",
-        "symbol": "沪深300",
-        "desc": "经典趋势跟踪",
-        "page": "策略回测",
-        "strategy": "双均线策略"
-    },
-    {
-        "name": "RSI策略",
-        "symbol": "沪深300",
-        "desc": "震荡反转神器",
-        "page": "策略回测",
-        "strategy": "RSI超买超卖策略"
-    },
-    {
-        "name": "4大策略PK",
-        "symbol": "沪深300",
-        "desc": "多策略横向对比",
-        "page": "批量分析",
-        "mode": "多策略对比"
-    },
-    {
-        "name": "策略组合优化",
-        "symbol": "沪深300",
-        "desc": "马科维茨权重计算",
-        "page": "批量分析",
-        "mode": "组合优化"
-    }
-]
+end_date_default = datetime.now().strftime("%Y-%m-%d")
+start_date_default = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
 
-for idx, preset in enumerate(quick_presets):
-    with [col1, col2, col3, col4][idx]:
-        st.markdown(f"**{preset['name']}**")
-        st.caption(f"{preset['symbol']} | {preset['desc']}")
-        if st.button(f"→ 直接{preset['page']}", key=f"quick_{idx}", use_container_width=True):
-            if preset['page'] == "策略回测":
-                st.session_state.quick_strategy = preset.get('strategy')
-                st.session_state.quick_symbol = preset.get('symbol')
-                st.switch_page("pages/01_策略回测.py")
-            else:
-                st.switch_page("pages/02_批量分析.py")
+if 'start_date' not in st.session_state:
+    st.session_state.start_date = start_date_default
+if 'end_date' not in st.session_state:
+    st.session_state.end_date = end_date_default
+
+with col1:
+    if st.button("近1年", use_container_width=True):
+        st.session_state.start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        st.session_state.end_date = end_date_default
+        st.rerun()
+
+with col2:
+    if st.button("近3年", use_container_width=True):
+        st.session_state.start_date = (datetime.now() - timedelta(days=1095)).strftime("%Y-%m-%d")
+        st.session_state.end_date = end_date_default
+        st.rerun()
+
+with col3:
+    if st.button("近5年", use_container_width=True):
+        st.session_state.start_date = (datetime.now() - timedelta(days=1825)).strftime("%Y-%m-%d")
+        st.session_state.end_date = end_date_default
+        st.rerun()
+
+with col4:
+    if st.button("2015年至今", use_container_width=True):
+        st.session_state.start_date = "2015-01-01"
+        st.session_state.end_date = end_date_default
+        st.rerun()
+
+col1, col2 = st.columns(2)
+with col1:
+    start_date = st.date_input("开始日期", value=datetime.strptime(st.session_state.start_date, "%Y-%m-%d"))
+with col2:
+    end_date = st.date_input("结束日期", value=datetime.strptime(st.session_state.end_date, "%Y-%m-%d"))
+
+st.session_state.start_date = start_date.strftime("%Y-%m-%d")
+st.session_state.end_date = end_date.strftime("%Y-%m-%d")
 
 st.markdown("---")
 
-# ========== 功能卡片
-st.markdown("###  核心功能")
+# 开始回测按钮
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("开始回测", use_container_width=True, type="primary"):
+        # 保存参数到session state，跳转到回测页面
+        st.session_state.quick_start_mode = True
+        st.session_state.quick_symbol = st.session_state.selected_symbol
+        st.session_state.quick_strategy = st.session_state.selected_strategy
+        st.session_state.quick_start_date = st.session_state.start_date
+        st.session_state.quick_end_date = st.session_state.end_date
+        st.switch_page("pages/01_策略回测.py")
+
+st.markdown("---")
+
+# ========== 功能入口区 ==========
+st.markdown("### 🔧 更多功能")
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown("####  策略回测")
+    st.markdown("#### 策略回测")
     st.caption("单策略完整回测分析")
     st.markdown("- 20个主流量价策略")
     st.markdown("- 完整绩效指标计算")
-    st.markdown("- 月度收益热力图")
-    st.markdown("- 交易盈亏分布分析")
     st.markdown("- 参数敏感性扫描")
-    if st.button("进入策略回测 →", use_container_width=True, type="primary"):
+    if st.button("进入策略回测 →", key="entry_backtest", use_container_width=True):
         st.switch_page("pages/01_策略回测.py")
 
 with col2:
-    st.markdown("####  批量分析")
+    st.markdown("#### 批量分析")
     st.caption("多维度批量计算与对比")
     st.markdown("- 同一标的多策略对比")
     st.markdown("- 同一策略多标的回测")
     st.markdown("- 策略组合权重优化")
-    st.markdown("- 相关性矩阵分析")
-    if st.button("进入批量分析 →", use_container_width=True, type="primary"):
+    if st.button("进入批量分析 →", key="entry_batch", use_container_width=True):
         st.switch_page("pages/02_批量分析.py")
 
 with col3:
-    st.markdown("####  策略百科")
+    st.markdown("#### 策略百科")
     st.caption("20个策略深度知识库")
     st.markdown("- 每个策略7维度详解")
     st.markdown("- A股实盘参数建议")
-    st.markdown("- 适用与失效场景")
     st.markdown("- 常见陷阱与避坑指南")
-    if st.button("进入策略百科 →", use_container_width=True, type="primary"):
+    if st.button("进入策略百科 →", key="entry_wiki", use_container_width=True):
         st.switch_page("pages/03_策略百科.py")
 
 st.markdown("---")
 
-# ========== 统计卡片
-st.markdown("###  内置策略库（20个）")
-
-strategy_categories = {
-    " 趋势跟踪类（6个）": ["双均线策略", "MACD策略", "DMA平均线差策略", 
-                           "TRIX三重指数策略", "均线多头发散策略", "唐奇安通道突破策略"],
-    " 震荡反转类（7个）": ["RSI超买超卖策略", "KDJ随机指标策略", "CCI顺势指标策略",
-                           "WR威廉指标策略", "MOM动量线策略", "ROC变动率策略", "BIAS乖离率策略"],
-    " 通道突破类（2个）": ["布林带突破策略", "肯特纳通道突破策略"],
-    "📉 量价配合类（4个）": ["成交量突破策略", "OBV能量潮策略", "VR容量比率策略", "EMV简易波动策略"],
-    " 趋势强弱类（1个）": ["DMI趋向指标策略"],
-}
-
-for category, strategies in strategy_categories.items():
-    with st.expander(category, expanded=False):
-        cols = st.columns(3)
-        for idx, s in enumerate(strategies):
-            cols[idx % 3].markdown(f"- {s}")
-
-st.markdown("---")
-
-# ========== 策略选型矩阵
-st.markdown("###  策略选型参考矩阵")
+# ========== 策略选型参考 ==========
+st.markdown("### 📋 策略选型参考矩阵")
 
 selection_data = [
     {"市场状态": "明确单边上涨趋势", "首选策略": "唐奇安通道、双均线、DMI", "禁用策略": "RSI、KDJ、WR、BIAS", "核心逻辑": "趋势策略让利润奔跑，震荡策略会反复卖飞"},
@@ -146,67 +242,4 @@ df_selection = pd.DataFrame(selection_data)
 st.table(df_selection)
 
 st.markdown("---")
-
-# ========== 使用层次引导
-st.markdown("###  4层使用深度指南")
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.markdown("#### L1 入门层")
-    st.caption("新手用户，刚接触量化")
-    st.markdown("- 策略百科 学习原理")
-    st.markdown("- 快速开始 一键体验")
-    st.success("目标：建立正确的策略认知")
-
-with col2:
-    st.markdown("#### L2 进阶层")
-    st.caption("有一定经验，想优化")
-    st.markdown("- 策略回测 深度分析")
-    st.markdown("- 参数扫描 找到最优值")
-    st.info("目标：找到适合自己的参数")
-
-with col3:
-    st.markdown("#### L3 专业层")
-    st.caption("专业交易者，稳定盈利")
-    st.markdown("- 多策略对比 筛选优胜")
-    st.markdown("- 组合优化 分散风险")
-    st.warning("目标：构建稳定的多策略系统")
-
-with col4:
-    st.markdown("#### L4 专家层")
-    st.caption("量化开发者，自研策略")
-    st.markdown("- 修改策略源码")
-    st.markdown("- 开发自定义因子")
-    st.error("目标：开发自己的独家策略")
-
-st.markdown("---")
-
-# ========== 产品路线图
-st.markdown("###  产品路线图")
-
-progress_data = [
-    {"功能模块": "20个主流量价策略库", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "完整绩效指标计算", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "策略深度百科知识库", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "策略选型矩阵指南", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "多策略对比分析", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "参数敏感性扫描", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "月度热力图/盈亏分布", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "多标的批量回测", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "策略组合优化", "进度": 100, "状态": " 已完成"},
-    {"功能模块": "PDF报告导出", "进度": 0, "状态": " 规划中"},
-    {"功能模块": "自定义策略编辑器", "进度": 0, "状态": " 规划中"},
-]
-
-for item in progress_data:
-    col1, col2, col3 = st.columns([3, 5, 2])
-    with col1:
-        st.markdown(f"{item['状态']} {item['功能模块']}")
-    with col2:
-        st.progress(item['进度'] / 100)
-    with col3:
-        st.markdown(f"{item['进度']}%")
-
-st.markdown("---")
-st.caption("Rock Quant 2.2.0 - 顽岩量价模型 | 完整开源 | 支持专业PDF报告导出 | 所有回测结果基于A股历史数据")
+st.caption("Rock Quant 2.4.0 - 顽岩量价模型 | 完整开源 | 所有回测结果基于A股历史数据")
