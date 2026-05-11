@@ -88,40 +88,81 @@ STRATEGY_GUIDE = {
 st.title(" 策略回测")
 st.caption("单策略回测与深度绩效分析")
 
-# ========== 数据源选择 ==========
-col_data1, col_data2 = st.columns([3, 1])
-with col_data1:
+# ========== 数据源选择（优化版）==========
+with st.sidebar:
+    st.markdown("### 数据源配置")
+    
     data_sources = [
-        ("模拟数据", "simulated"),
-        ("Akshare 免费实盘数据", "akshare"),
-        ("Tushare 专业数据", "tushare"),
+        ("📊 模拟历史数据", "simulated", "内置数据，无需网络，快速回测"),
+        ("🌐 Akshare 免费数据", "akshare", "免费开源数据，覆盖A股/指数/期货"),
+        ("💎 Tushare 专业数据", "tushare", "专业金融数据库，需Token，数据稳定"),
     ]
-    source_labels = [s[0] for s in data_sources]
-    source_codes = [s[1] for s in data_sources]
     
-    default_source_idx = source_codes.index(st.session_state.get('data_source', 'simulated')) if st.session_state.get('data_source', 'simulated') in source_codes else 0
-    selected_source_label = st.selectbox("选择数据源", source_labels, index=default_source_idx, key="data_source_select")
-    selected_source = source_codes[source_labels.index(selected_source_label)]
-    st.session_state['data_source'] = selected_source
+    # 卡片式数据源选择UI
+    current_source = st.session_state.get('data_source', 'simulated')
     
-    # Tushare Token输入
+    for display_name, source_id, desc in data_sources:
+        is_selected = current_source == source_id
+        button_type = "primary" if is_selected else "secondary"
+        
+        if st.button(f"{display_name}", type=button_type, use_container_width=True, key=f"ds_{source_id}"):
+            st.session_state['data_source'] = source_id
+            st.rerun()
+        
+        if is_selected:
+            st.caption(f"  {desc}")
+    
+    selected_source = st.session_state.get('data_source', 'simulated')
+    
+    # Tushare Token配置优化
     if selected_source == 'tushare':
-        tushare_token = st.text_input("Tushare Token", type="password", 
-                                      value=st.session_state.get('tushare_token', ''),
-                                      help="请输入您的 Tushare Token，可在 https://tushare.pro/user/token 获取")
-        st.session_state['tushare_token'] = tushare_token
-        loader.set_tushare_token(tushare_token)
+        st.markdown("---")
+        st.markdown("#### Tushare Token 设置")
+        
+        current_token = st.session_state.get('tushare_token', '')
+        has_token = len(current_token) > 20
+        
+        if has_token:
+            st.success("✅ Token已配置，数据源可用")
+            if st.button("🔄 更新Token", type="secondary", use_container_width=True):
+                st.session_state['tushare_token'] = ''
+                st.rerun()
+        else:
+            tushare_token = st.text_input(
+                "输入Tushare Token",
+                type="password",
+                help="访问 https://tushare.pro/user/token 注册获取",
+                placeholder="请输入您的Token...",
+                key="tushare_input"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ 保存", type="primary", use_container_width=True):
+                    if len(tushare_token) > 20:
+                        st.session_state['tushare_token'] = tushare_token
+                        loader.set_tushare_token(tushare_token)
+                        st.success("Token已保存！")
+                        st.rerun()
+                    else:
+                        st.error("Token格式不正确")
+            with col2:
+                st.link_button("🔗 获取Token", "https://tushare.pro/user/token", use_container_width=True)
     
     loader.set_data_source(selected_source)
     
-    # 检查数据源可用性
+    # 数据源可用性状态
     available, msg = loader.check_data_source_available(selected_source)
-    if not available:
-        st.warning(f" {msg}")
-    elif selected_source == 'simulated':
-        st.info(" 当前使用模拟数据进行演示，真实数据可选择 Akshare 或 Tushare")
+    st.markdown("---")
+    
+    if available and selected_source != 'simulated':
+        st.success(f"✅ 数据源连接正常")
+    elif not available and selected_source != 'simulated':
+        st.warning(f"⚠️ {msg}，将使用模拟数据进行回测")
+        st.session_state['data_source'] = 'simulated'
+        selected_source = 'simulated'
     else:
-        st.success(f" 数据源已切换至 {selected_source_label}")
+        st.info("💡 使用模拟数据进行快速回测演示")
     
     st.markdown("---")
 
@@ -436,6 +477,167 @@ if 'last_result' in st.session_state:
                 except Exception as e:
                     st.error(f"报告生成失败: {str(e)}")
                     st.caption("请检查控制台输出或联系技术支持")
+    
+    # ========== 参数自动优化推荐 ==========
+    st.markdown("---")
+    with st.expander("🔧 参数自动优化推荐", expanded=False):
+        st.markdown("自动搜索最优参数组合，基于回测结果智能推荐优化方向")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            optimize_target = st.selectbox(
+                "优化目标",
+                ["夏普比率最大化", "卡玛比率最大化", "年化收益率最大化", "最大回撤最小化", "胜率最大化"],
+                index=0
+            )
+            max_iterations = st.slider("搜索粒度", 10, 100, 30, help="数值越大搜索越精确，耗时越长")
+        
+        with col2:
+            search_range = st.slider("搜索范围 (%)", 30, 150, 80, help="在当前参数基础上的上下浮动范围")
+            risk_penalty = st.checkbox("风险惩罚", value=True, help="对高回撤参数组合施加惩罚")
+        
+        if st.button("🚀 开始参数优化", type="primary", use_container_width=True):
+            with st.spinner("正在搜索最优参数组合，预计需要 30-60 秒..."):
+                strategy = create_strategy(strategy_name)
+                param_schema = strategy.get_params_schema()
+                
+                # 准备待优化参数列表
+                param_combinations = []
+                for param_name, config in param_schema.items():
+                    current_val = getattr(strategy, param_name)
+                    param_type = config.get('type', 'int')
+                    min_val = config.get('min', 1)
+                    max_val = config.get('max', 200)
+                    
+                    # 计算搜索范围
+                    search_min = max(min_val, int(current_val * (100 - search_range) / 100))
+                    search_max = min(max_val, int(current_val * (100 + search_range) / 100))
+                    
+                    # 生成候选值
+                    if param_type == 'int':
+                        step = max(1, (search_max - search_min) // int(max_iterations / len(param_schema)))
+                        values = list(range(search_min, search_max + 1, step))
+                    else:
+                        step = (search_max - search_min) / int(max_iterations / len(param_schema))
+                        values = [round(search_min + i * step, 2) for i in range(int((search_max - search_min) / step) + 1)]
+                    
+                    param_combinations.append((param_name, values, param_type))
+                
+                # 网格搜索
+                best_score = -float('inf')
+                best_params = {}
+                results = []
+                
+                # 简化：每个参数测试5个值，笛卡尔积
+                from itertools import product
+                param_values_list = []
+                param_names = []
+                for p_name, p_values, _ in param_combinations:
+                    # 每个参数最多取5个值，避免组合爆炸
+                    sampled = p_values[::max(1, len(p_values) // 5)][:5]
+                    param_values_list.append(sampled)
+                    param_names.append(p_name)
+                
+                config = BacktestConfig(initial_capital=initial_capital)
+                engine = BacktestEngine(config)
+                
+                progress = st.progress(0)
+                total = len(list(product(*param_values_list)))
+                
+                for idx, param_values in enumerate(product(*param_values_list)):
+                    # 设置参数
+                    test_strategy = create_strategy(strategy_name)
+                    for p_name, p_val in zip(param_names, param_values):
+                        setattr(test_strategy, p_name, p_val)
+                    
+                    # 回测
+                    signals = test_strategy.generate_signals(data)
+                    test_result = engine.run(data, signals)
+                    perf = test_result.performance
+                    
+                    # 计算综合评分
+                    if optimize_target == "夏普比率最大化":
+                        score = perf['夏普比率']
+                    elif optimize_target == "卡玛比率最大化":
+                        score = perf['卡玛比率']
+                    elif optimize_target == "年化收益率最大化":
+                        score = perf['年化收益率(CAGR)']
+                    elif optimize_target == "最大回撤最小化":
+                        score = -perf['最大回撤']  # 取负数，越小越好
+                    elif optimize_target == "胜率最大化":
+                        score = perf['胜率']
+                    else:
+                        score = perf['夏普比率']
+                    
+                    # 风险惩罚
+                    if risk_penalty and perf['最大回撤'] > 30:
+                        score *= 0.7  # 回撤>30%惩罚30%
+                    elif risk_penalty and perf['最大回撤'] > 20:
+                        score *= 0.85  # 回撤>20%惩罚15%
+                    
+                    results.append({
+                        'params': dict(zip(param_names, param_values)),
+                        '年化%': round(perf['年化收益率(CAGR)'], 2),
+                        '最大回撤%': round(perf['最大回撤'], 2),
+                        '夏普比率': round(perf['夏普比率'], 2),
+                        '卡玛比率': round(perf['卡玛比率'], 2),
+                        '胜率%': round(perf['胜率'], 2),
+                        'score': round(score, 3)
+                    })
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_params = dict(zip(param_names, param_values))
+                    
+                    progress.progress(min(idx / total, 1.0))
+                
+                progress.empty()
+                
+                # 展示结果
+                st.success(f"✅ 优化完成！共测试 {total} 组参数")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**🏆 最优参数组合**")
+                    for p_name, p_val in best_params.items():
+                        current_val = getattr(strategy, p_name)
+                        change = ((p_val - current_val) / current_val) * 100
+                        delta = f"{change:+.1f}%"
+                        st.metric(p_name, p_val, delta=delta)
+                
+                with col2:
+                    best_result = [r for r in results if r['params'] == best_params][0]
+                    st.markdown("**📊 预期优化效果**")
+                    st.metric("年化收益率", f"{best_result['年化%']:.2f}%", 
+                             delta=f"{best_result['年化%'] - perf['年化收益率(CAGR)']:+.2f}%")
+                    st.metric("最大回撤", f"{best_result['最大回撤%']:.2f}%",
+                             delta=f"{best_result['最大回撤%'] - perf['最大回撤']:+.2f}%",
+                             delta_color="inverse")
+                    st.metric("夏普比率", f"{best_result['夏普比率']:.2f}",
+                             delta=f"{best_result['夏普比率'] - perf['夏普比率']:+.2f}")
+                
+                # Top5推荐参数
+                st.markdown("**📋 Top5 参数组合推荐**")
+                top5 = sorted(results, key=lambda x: -x['score'])[:5]
+                top5_df = []
+                for r in top5:
+                    row = {**r['params']}
+                    row['年化%'] = r['年化%']
+                    row['最大回撤%'] = r['最大回撤%']
+                    row['夏普比率'] = r['夏普比率']
+                    row['综合评分'] = r['score']
+                    top5_df.append(row)
+                
+                st.dataframe(pd.DataFrame(top5_df), use_container_width=True, hide_index=True)
+                
+                # 一键应用最优参数
+                if st.button("✅ 一键应用最优参数", type="secondary"):
+                    for p_name, p_val in best_params.items():
+                        key = f"param_{strategy_name}_{p_name}"
+                        st.session_state[f"value_{key}"] = p_val
+                        if key in st.session_state:
+                            st.session_state[key] = p_val
+                    st.success("参数已应用！重新运行回测即可查看效果")
     
     # ========== 详细分析内容（第三层） ==========
     if st.session_state.show_detail:
