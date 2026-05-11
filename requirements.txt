@@ -1,6 +1,6 @@
 pandas>=2.0.0
 numpy>=1.24.0
-streamlit>=1.30.0
+streamlit>=1.32.0
 plotly>=5.18.0
 altair>=5.2.0
 pydantic>=2.5.0
@@ -13,5 +13,8 @@ reportlab>=4.0.0
 matplotlib>=3.5.0
 
 # 实盘数据接入
-akshare>=1.10.0 # 可选，免费开源数据源
-tushare>=1.2.89 # 可选，专业数据源
+akshare>=1.10.0
+tushare>=1.2.89
+
+# 回测引擎与因子库
+pandas-ta>=0.3.14b0
