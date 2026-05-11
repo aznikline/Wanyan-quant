@@ -864,3 +864,19 @@ def create_strategy(name: str, **params) -> BaseStrategy:
     if name not in STRATEGY_REGISTRY:
         raise ValueError(f"未知策略: {name}，可用策略: {list(STRATEGY_REGISTRY.keys())}")
     return STRATEGY_REGISTRY[name](**params)
+
+
+def get_strategy_info(name: str) -> Dict[str, Any]:
+    """获取策略详细信息"""
+    if name not in STRATEGY_REGISTRY:
+        raise ValueError(f"未知策略: {name}，可用策略: {list(STRATEGY_REGISTRY.keys())}")
+    cls = STRATEGY_REGISTRY[name]
+    return {
+        "name": cls.name,
+        "description": cls.description,
+        "params_schema": cls.get_params_schema(cls)
+    }
+
+
+# 兼容旧版变量名
+STRATEGY_CLASSES = list(STRATEGY_REGISTRY.values())

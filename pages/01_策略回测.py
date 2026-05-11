@@ -263,6 +263,28 @@ if run_triggered:
             st.session_state.end_date = end_date
             st.session_state.initial_capital = initial_capital
             
+            # ========== 回测完成主动提醒 ==========
+            perf = result.performance
+            annual_return = perf['年化收益率(CAGR)']
+            max_returns = perf['年化收益率(CAGR)']
+            max_drawdown = perf['最大回撤']
+            win_rate = perf['胜率']
+            total_trades = perf['总交易次数']
+            sharpe = perf['夏普比率']
+            
+            # 生成策略表现评估
+            if annual_return > 15 and max_drawdown < 20 and win_rate > 50:
+                toast_icon = "🎉"
+                toast_msg = f"策略表现优秀！年化{annual_return:.1f}%，最大回撤{max_drawdown:.1f}%，胜率{win_rate:.1f}%，共{total_trades}笔交易，夏普{sharpe:.2f}"
+            elif annual_return > 5:
+                toast_icon = "✅"
+                toast_msg = f"回测完成！年化{annual_return:.1f}%，最大回撤{max_drawdown:.1f}%，胜率{win_rate:.1f}%"
+            else:
+                toast_icon = "⚠️"
+                toast_msg = f"回测完成，表现一般！年化{annual_return:.1f}%，最大回撤{max_drawdown:.1f}%"
+            
+            st.toast(toast_msg, icon=toast_icon)
+            
     except Exception as e:
         st.error(f" 回测失败: {str(e)}")
         st.caption("如果问题持续，请检查参数设置或刷新页面重试")
