@@ -963,4 +963,167 @@ else:
         st.markdown("回测结果仅供参考，不构成投资建议")
 
 st.markdown("---")
-st.caption("Rock Quant 2.0 - 顽岩量价模型")
+
+# ========== 7. AI智能分析专区 ==========
+if 'last_result' in st.session_state:
+    st.subheader("🤖 AI智能分析")
+    
+    if st.button("🧠 启动AI深度分析", type="primary", use_container_width=True):
+        with st.spinner("AI正在深度分析策略表现，请稍候..."):
+            try:
+                from src.ai_analyzer import AIStrategyAnalyzer
+                
+                analyzer = AIStrategyAnalyzer()
+                ai_result = analyzer.analyze(
+                    equity_curve=st.session_state.last_result.equity_curve,
+                    trades=st.session_state.last_result.trades,
+                    perf=st.session_state.last_perf,
+                    strategy_name=st.session_state.last_strategy,
+                    symbol_name=st.session_state.last_symbol
+                )
+                
+                # ===== 7.1 综合评分卡片 =====
+                st.markdown("## 📊 策略综合评分")
+                
+                # 评分仪表盘
+                score = ai_result.score
+                
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    # 评级徽章
+                    grade_colors = {'S': '#1a9641', 'A': '#a6d96a', 'B': '#fdae61', 'C': '#f46d43', 'D': '#d73027', 'F': '#000000'}
+                    st.markdown(f"<div style='text-align: center; padding: 30px; background: linear-gradient(135deg, {grade_colors.get(score.grade, '#666')}20 0%, {grade_colors.get(score.grade, '#666')}40 100%); border-radius: 20px; border: 3px solid {grade_colors.get(score.grade, '#666')};'>
+                        <div style='font-size: 60px; font-weight: bold; color: {grade_colors.get(score.grade, '#666')};'>{score.grade}</div>
+                        <div style='font-size: 24px; color: #333;'>综合评级</div>
+                        <div style='font-size: 48px; font-weight: bold; color: #1a1a1a; margin-top: 10px;'>{score.overall_score:.0f}</div>
+                        <div style='font-size: 14px; color: #666;'>满分 100 分</div>
+                    </div>", unsafe_allow_html=True)
+                
+                # 5维度得分条形图
+                st.markdown("### 五维度详细得分")
+                
+                import plotly.graph_objects as go
+                
+                categories = ['收益能力', '风险控制', '风险调整收益', '稳定性', '交易质量']
+                scores = [score.return_score, score.risk_score, score.risk_adjusted_score, score.consistency_score, score.trading_quality_score]
+                max_scores = [40, 20, 15, 10, 15]  # 各维度满分
+                percentages = [s/m*100 for s, m in zip(scores, max_scores)]
+                
+                fig_radar = go.Figure(data=go.Bar(
+                    x=categories,
+                    y=percentages,
+                    text=[f'{s:.0f}/{m}' for s, m in zip(scores, max_scores)],
+                    textposition='auto',
+                    marker_color=['#2ecc71' if p >= 70 else '#f39c12' if p >= 50 else '#e74c3c' for p in percentages],
+                ))
+                
+                fig_radar.update_layout(
+                    height=350,
+                    yaxis_title='得分百分比 (%)',
+                    yaxis_range=[0, 105],
+                    showlegend=False
+                )
+                
+                st.plotly_chart(fig_radar, use_container_width=True)
+                
+                # 优势与不足并列
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("### ✅ 策略优势")
+                    for s in score.strengths:
+                        st.success(f"• {s}")
+                with col2:
+                    st.markdown("### ⚠️ 待改进项")
+                    for w in score.weaknesses:
+                        st.warning(f"• {w}")
+                
+                st.markdown("---")
+                
+                # ===== 7.2 收益归因分析 =====
+                st.markdown("## 🔬 五维度收益归因分析")
+                attr = ai_result.attribution
+                
+                # 饼图
+                fig_pie = go.Figure(data=[go.Pie(
+                    labels=['📈 趋势捕捉', '🌊 波动择时', '⚖️ 均值回归', '🎯 仓位管理', '🎲 运气成分'],
+                    values=[abs(attr.trend_capture), abs(attr.volatility_timing), abs(attr.mean_reversion), 
+                           abs(attr.position_sizing), abs(attr.luck_factor)],
+                    hole=.4,
+                    marker_colors=['#3498db', '#9b59b6', '#1abc9c', '#f39c12', '#e74c3c'],
+                    textinfo='label+percent',
+                    textposition='outside'
+                )])
+                
+                fig_pie.update_layout(height=400, showlegend=False)
+                st.plotly_chart(fig_pie, use_container_width=True)
+                
+                # 归因解读表格
+                attr_data = [
+                    ['📈 趋势捕捉', f'{abs(attr.trend_capture):.1f}%', analyzer._interpret_attribution_factor('trend', attr.trend_capture)],
+                    ['🌊 波动择时', f'{abs(attr.volatility_timing):.1f}%', analyzer._interpret_attribution_factor('volatility', attr.volatility_timing)],
+                    ['⚖️ 均值回归', f'{abs(attr.mean_reversion):.1f}%', analyzer._interpret_attribution_factor('mean_reversion', attr.mean_reversion)],
+                    ['🎯 仓位管理', f'{abs(attr.position_sizing):.1f}%', analyzer._interpret_attribution_factor('position', attr.position_sizing)],
+                    ['🎲 运气成分', f'{abs(attr.luck_factor):.1f}%', analyzer._interpret_attribution_factor('luck', attr.luck_factor)],
+                ]
+                
+                import pandas as pd
+                attr_df = pd.DataFrame(attr_data, columns=['收益来源', '贡献占比', 'AI解读'])
+                st.dataframe(attr_df, use_container_width=True, hide_index=True)
+                
+                st.markdown("---")
+                
+                # ===== 7.3 多智能体辩论评估 =====
+                st.markdown("## 🗣️ 多智能体辩论评估")
+                st.caption("4位不同风格的AI专家独立评估，兼听则明")
+                
+                debate = ai_result.debate_results
+                
+                # 专家卡片
+                cols = st.columns(2)
+                for i, agent in enumerate(debate):
+                    with cols[i % 2]:
+                        rec_colors = {
+                            '强烈推荐': '#1a9641',
+                            '可以使用': '#a6d96a', 
+                            '谨慎使用': '#fdae61',
+                            '不推荐': '#d73027'
+                        }
+                        color = rec_colors.get(agent.recommendation, '#666')
+                        
+                        with st.expander(f"**{agent.role.value}** | {agent.recommendation} (置信度: {agent.confidence}%)", expanded=True):
+                            st.markdown(f"**观点：** {agent.opinion}")
+                            st.markdown("**核心论据：**")
+                            for point in agent.key_points:
+                                st.markdown(f"- {point}")
+                
+                st.markdown("---")
+                
+                # ===== 7.4 AI完整解读 =====
+                st.markdown("## 📝 AI完整解读报告")
+                
+                with st.expander("展开完整AI分析报告", expanded=True):
+                    st.markdown(ai_result.interpretation.replace('### ', '#### '))
+                
+                st.markdown("---")
+                
+                # ===== 7.5 改进建议 =====
+                st.markdown("## 💡 改进建议")
+                for i, rec in enumerate(score.recommendations[:5], 1):
+                    st.info(f"**{i}.** {rec}")
+                
+                # 最终结论
+                st.markdown("## 🎯 最终结论")
+                final_conclusion = ai_result.final_conclusion if ai_result.final_conclusion else "分析完成，请参考以上各维度评估结果"
+                st.success(final_conclusion)
+                
+                # 缓存AI结果
+                st.session_state.last_ai_result = ai_result
+                
+            except Exception as e:
+                st.error(f"AI分析失败: {str(e)}")
+                st.caption("请确保已完成回测且ai_analyzer模块存在")
+                import traceback
+                st.code(traceback.format_exc())
+
+st.markdown("---")
+st.caption("Rock Quant 2.6 - 顽岩AI量化分析系统")

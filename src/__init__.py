@@ -23,17 +23,17 @@ Rock Quant 是一个面向个人量化交易者的轻量级量价策略验证平
 - pdf_generator.py: PDF报告生成器
 """
 
-__version__ = "2.4.0"
+__version__ = "2.6.0"
 
-from config import BacktestConfig, RiskControlConfig, PositionConfig
-from performance import PerformanceCalculator
-from backtest_engine import BacktestEngine, BacktestResult
-from strategies import (
+from src.config import BacktestConfig, RiskControlConfig, PositionConfig
+from src.performance import PerformanceCalculator
+from src.backtest_engine import BacktestEngine, BacktestResult
+from src.strategies import (
     BaseStrategy, get_all_strategies, create_strategy, get_strategy_info,
     STRATEGY_CLASSES
 )
-from data_loader import DataLoader
-from factors import (
+from src.data_loader import DataLoader
+from src.factors import (
     BaseFactor, FactorRegistry, calculate_factor, get_factor_info,
     list_factors_by_type, FACTOR_LIST, FACTORS_BY_TYPE
 )
