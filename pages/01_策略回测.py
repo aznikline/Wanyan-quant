@@ -992,12 +992,12 @@ if 'last_result' in st.session_state:
                 with col2:
                     # 评级徽章
                     grade_colors = {'S': '#1a9641', 'A': '#a6d96a', 'B': '#fdae61', 'C': '#f46d43', 'D': '#d73027', 'F': '#000000'}
-                    st.markdown(f"<div style='text-align: center; padding: 30px; background: linear-gradient(135deg, {grade_colors.get(score.grade, '#666')}20 0%, {grade_colors.get(score.grade, '#666')}40 100%); border-radius: 20px; border: 3px solid {grade_colors.get(score.grade, '#666')};'>
+                    st.markdown(f'''<div style='text-align: center; padding: 30px; background: linear-gradient(135deg, {grade_colors.get(score.grade, '#666')}20 0%, {grade_colors.get(score.grade, '#666')}40 100%); border-radius: 20px; border: 3px solid {grade_colors.get(score.grade, '#666')};'>
                         <div style='font-size: 60px; font-weight: bold; color: {grade_colors.get(score.grade, '#666')};'>{score.grade}</div>
                         <div style='font-size: 24px; color: #333;'>综合评级</div>
                         <div style='font-size: 48px; font-weight: bold; color: #1a1a1a; margin-top: 10px;'>{score.overall_score:.0f}</div>
                         <div style='font-size: 14px; color: #666;'>满分 100 分</div>
-                    </div>", unsafe_allow_html=True)
+                    </div>''', unsafe_allow_html=True)
                 
                 # 5维度得分条形图
                 st.markdown("### 五维度详细得分")
