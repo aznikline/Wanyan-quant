@@ -1,0 +1,72 @@
+{
+  "name": "rockquant",
+  "title": "顽岩量化 - Rock Quant",
+  "version": "2.6.0",
+  "author": "Rock Quant Team",
+  "authorEmail": "dev@rockquant.io",
+  "repository": "https://github.com/aznikline/Wanyan-quant",
+  "homepage": "https://github.com/aznikline/Wanyan-quant",
+  "license": "MIT",
+  "category": "finance",
+  "tags": [
+    "quant",
+    "backtest",
+    "ai-analysis",
+    "trading",
+    "strategy"
+  ],
+  "description": "AI驱动的量价策略回测与分析工具，支持20+经典策略、5维度智能评分、多智能体辩论评估",
+  "longDescription": "Rock Quant 是一个面向个人量化交易者的轻量级量价策略验证平台，采用纯Python规则引擎实现的AI智能分析系统，无需LLM即可提供专业级的策略评估。支持20+预设策略、全向量化回测引擎、5维度AI智能评分、4位AI专家多智能体辩论评估、5维度收益归因分析等核心功能。",
+  "icon": "📊",
+  "previewImages": [],
+  "commands": [
+    {
+      "name": "run",
+      "description": "运行策略回测",
+      "usage": "rockquant run <strategy> [options]"
+    },
+    {
+      "name": "analyze",
+      "description": "AI深度分析策略表现",
+      "usage": "rockquant analyze <strategy> [options]"
+    },
+    {
+      "name": "list",
+      "description": "列出所有可用策略",
+      "usage": "rockquant list"
+    },
+    {
+      "name": "factors",
+      "description": "列出所有量价因子",
+      "usage": "rockquant factors"
+    },
+    {
+      "name": "report",
+      "description": "生成PDF分析报告",
+      "usage": "rockquant report <strategy> --output <file>"
+    }
+  ],
+  "features": [
+    "20+ 经典量价策略，覆盖趋势、震荡、成交量三大类",
+    "全向量化回测引擎，速度比传统循环快5-10倍",
+    "5维度AI智能评分系统（收益/风险/调整后收益/稳定性/交易质量）",
+    "S/A/B/C/D/F 六级评级体系",
+    "4位AI专家多智能体辩论评估（风控/交易/统计/行为金融）",
+    "5维度收益归因分析（趋势捕捉/波动择时/均值回归/仓位管理/运气成分）",
+    "完整AI解读报告自动生成",
+    "纯Python规则引擎，无LLM依赖，10ms级响应，结果100%可复现"
+  ],
+  "quickstart": {
+    "install": "pip install -e .",
+    "usage": [
+      "rockquant list",
+      "rockquant run 双均线策略",
+      "rockquant analyze RSI超买超卖策略"
+    ]
+  },
+  "minimumOpenclawVersion": "0.1.0",
+  "createdAt": "2026-04-22",
+  "updatedAt": "2026-05-19",
+  "rating": 5.0,
+  "downloads": 0
+}
