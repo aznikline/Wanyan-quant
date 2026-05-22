@@ -6,8 +6,26 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.6.0-orange.svg)](https://github.com/aznikline/Wanyan-quant)
+[![Version](https://img.shields.io/badge/version-2.7.0-orange.svg)](https://github.com/aznikline/Wanyan-quant)
 [![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-purple.svg)](https://github.com/openclaw/openclaw)
+
+## ✨ v2.7 新增功能
+
+### 🔍 Lv.1 回测真实性补齐（`src/realism.py`）
+- **滑点模型**：比例 / 固定 / 波动率三种模式可选
+- **A股交易成本**：佣金（万二点五）+印花税（千一仅卖出）+过户费（万分之0.1）
+- **涨跌停过滤**：涨停不买、跌停不卖，ST 股可配 5%
+- **T+1 限制**：当日买入次日才可卖出
+- **一键开关**：侧边栏“真实模式”切换，默认开启
+
+实测效果：同一策略 理想回测 37.16% → 真实回测 25.39%（绩效衰减 11.77pp）
+
+### 📡 Lv.2 实时信号引擎（`src/live_signal.py` + 页面 8）
+- **增量数据拉取**：AKShare / Tushare / 本地缓存三级降级
+- **数据新鲜度检测**：fresh / stale / no_data 三状态
+- **批量信号生成**：多只标的同时跑同一策略
+- **多通道推送**：控制台 / 文件 / Streamlit 页面
+- **CLI 打造 cron 任务**：`python src/live_signal.py --symbols 000001.SZ --names 平安银行`
 
 ## ✨ 核心特性
 
