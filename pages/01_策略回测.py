@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from config import BacktestConfig
 from backtest_engine import BacktestEngine
+from realism import RealismConfig
 from strategies import get_all_strategies, create_strategy
 from data_loader import DataLoader
 
@@ -164,6 +165,36 @@ with st.sidebar:
     else:
         st.info("💡 使用模拟数据进行快速回测演示")
     
+    # ========== 真实性模式 Lv.1 ==========
+    st.markdown("---")
+    st.subheader("🔍 真实模式设置")
+    realism_enable = st.toggle(
+        "启用真实回测",
+        value=st.session_state.get("realism_enable", True),
+        help="启用后加入滑点、佣金、印花税、涨跌停过滤、T+1 限制，代价是净值下降。推荐一直开。"
+    )
+    st.session_state["realism_enable"] = realism_enable
+
+    with st.expander("高级：成本与市场机制参数", expanded=False):
+        realism_slip = st.slider("滑点比例‰", 0.0, 5.0, 1.0, 0.1) / 1000
+        realism_comm = st.slider("佣金率万", 0.0, 10.0, 2.5, 0.1) / 10000
+        realism_stamp = st.slider("印花税‰（仅卖出）", 0.0, 2.0, 1.0, 0.1) / 1000
+        realism_t1 = st.checkbox("T+1 限制（A股）", value=True)
+        realism_limit = st.checkbox("涨跌停过滤", value=True)
+        realism_is_st = st.checkbox("ST 股（5% 涨跌幅）", value=False)
+
+    st.session_state["realism_cfg"] = RealismConfig(
+        enable=realism_enable,
+        enable_slippage=True,
+        enable_cost=True,
+        enable_price_limit=realism_limit,
+        enable_t_plus_1=realism_t1,
+        slippage_ratio=realism_slip,
+        commission_rate=realism_comm,
+        stamp_tax_rate=realism_stamp,
+        is_st=realism_is_st,
+    )
+    
     st.markdown("---")
 
 st.markdown("---")
@@ -282,7 +313,8 @@ if run_triggered:
                 st.warning(" 数据量太少，建议选择更长的时间范围（至少30个交易日）")
             
             config = BacktestConfig(initial_capital=initial_capital)
-            engine = BacktestEngine(config)
+            realism_cfg = st.session_state.get("realism_cfg", RealismConfig(enable=False))
+            engine = BacktestEngine(config, realism_config=realism_cfg)
             
             # 关键修复：每次回测都重新创建strategy对象，从session_state读取参数
             strategy = create_strategy(strategy_name)
@@ -338,6 +370,17 @@ if 'last_result' in st.session_state:
     current_symbol = st.session_state.last_symbol
     
     st.success(f"回测完成 - {current_strategy} @ {current_symbol}")
+    
+    # ========== 真实性统计 ==========
+    rs = perf.get("realism_stats", {})
+    if perf.get("realism_enabled") and rs:
+        bb, bs, bt = rs.get('blocked_buy', 0), rs.get('blocked_sell', 0), rs.get('blocked_t1', 0)
+        if bb + bs + bt > 0:
+            st.warning(
+                f"真实模式干预统计：涨停阻买 {bb} 次 | 跌停阻卖 {bs} 次 | T+1 阻卖 {bt} 次"
+            )
+        else:
+            st.info("真实模式已启用，本次回测未触发阻断事件")
     
     # ========== 核心结论指标（第一层） ==========
     st.subheader("核心结论")
@@ -539,7 +582,8 @@ if 'last_result' in st.session_state:
                     param_names.append(p_name)
                 
                 config = BacktestConfig(initial_capital=initial_capital)
-                engine = BacktestEngine(config)
+                realism_cfg_opt = st.session_state.get("realism_cfg", RealismConfig(enable=False))
+                engine = BacktestEngine(config, realism_config=realism_cfg_opt)
                 
                 progress = st.progress(0)
                 total = len(list(product(*param_values_list)))
@@ -750,7 +794,8 @@ if 'last_result' in st.session_state:
                     
                     data = loader.load_data(symbol_code, str(s_date), str(e_date))
                     config = BacktestConfig(initial_capital=capital)
-                    engine = BacktestEngine(config)
+                    realism_cfg_scan = st.session_state.get("realism_cfg", RealismConfig(enable=False))
+                    engine = BacktestEngine(config, realism_config=realism_cfg_scan)
                     
                     # 批量回测
                     scan_results = []

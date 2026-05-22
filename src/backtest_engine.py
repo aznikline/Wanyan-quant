@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import BacktestConfig, RiskControlConfig, PositionConfig
 from performance import PerformanceCalculator
+from realism import RealismConfig, preprocess_signals, calc_cost_rate
 
 
 @dataclass
@@ -33,11 +34,14 @@ class BacktestEngine:
     def __init__(self, 
                  config: BacktestConfig,
                  risk_config: RiskControlConfig = None,
-                 position_config: PositionConfig = None):
+                 position_config: PositionConfig = None,
+                 realism_config: RealismConfig = None):
         self.config = config
         self.risk_config = risk_config or RiskControlConfig()
         self.position_config = position_config or PositionConfig()
+        self.realism_config = realism_config or RealismConfig(enable=False)
         self.performance_calculator = PerformanceCalculator()
+        self.realism_stats = {"blocked_buy": 0, "blocked_sell": 0, "blocked_t1": 0}
     
     def run(self, data: pd.DataFrame, signals: pd.Series) -> BacktestResult:
         """
@@ -55,6 +59,9 @@ class BacktestEngine:
         # 对齐信号与行情数据
         signals = signals.reindex(data.index).fillna(0)
         
+        # ====== 真实性补齐 Lv.1：涨跌停过滤 + T+1 限制 ======
+        signals, self.realism_stats = preprocess_signals(signals, data, self.realism_config)
+        
         # 向量化计算仓位
         positions = self._calculate_positions(signals, data['close'])
         
@@ -71,6 +78,11 @@ class BacktestEngine:
         # 计算绩效指标
         performance = self.performance_calculator.calculate_all(equity_curve, trades)
         
+        # 把真实性统计塞到 performance 里
+        performance["realism_stats"] = self.realism_stats
+        performance["realism_enabled"] = self.realism_config.enable
+
+        from dataclasses import asdict
         return BacktestResult(
             equity_curve=equity_curve,
             drawdown_curve=drawdown_curve,
@@ -81,7 +93,8 @@ class BacktestEngine:
             config={
                 "backtest": self.config.dict(),
                 "risk_control": self.risk_config.dict(),
-                "position": self.position_config.dict()
+                "position": self.position_config.dict(),
+                "realism": asdict(self.realism_config),
             }
         )
     
@@ -215,16 +228,40 @@ class BacktestEngine:
         return pd.DataFrame(trades)
     
     def _calculate_equity_curve(self, positions: pd.Series, trades: pd.DataFrame, data: pd.DataFrame) -> pd.Series:
-        """向量化计算净值曲线"""
+        """向量化计算净值曲线（含 Lv.1 真实成本）"""
         # 计算每日持仓收益
         daily_returns = positions.shift(1) * data['close'].pct_change()
         
-        # 扣除手续费和滑点
-        position_changes = positions.diff().abs()
-        transaction_costs = position_changes * (self.config.commission_rate + self.config.slippage_rate)
+        # ===== 交易成本 =====
+        position_changes = positions.diff().fillna(0)
+        abs_changes = position_changes.abs()
+        
+        if self.realism_config and self.realism_config.enable:
+            r = self.realism_config
+            # 滑点（按比例近似，向量化）
+            if r.enable_slippage:
+                if r.slippage_mode == "ratio":
+                    slip_rate = r.slippage_ratio
+                elif r.slippage_mode == "vol":
+                    rolling_atr = (data['high'] - data['low']).rolling(14).mean()
+                    slip_rate = (rolling_atr / data['close']).fillna(0) * r.slippage_vol_mult
+                else:  # fixed
+                    slip_rate = (r.slippage_fixed / data['close']).fillna(0)
+            else:
+                slip_rate = 0.0
+            # 佣金 + 过户费（双向）
+            base_cost = (r.commission_rate + r.transfer_fee_rate) if r.enable_cost else 0.0
+            # 印花税：仅卖出（position_changes < 0）
+            sell_mask = (position_changes < 0).astype(float)
+            stamp_cost = (r.stamp_tax_rate if r.enable_cost else 0.0) * sell_mask
+            
+            transaction_costs = abs_changes * (base_cost + slip_rate + stamp_cost)
+        else:
+            # 兼容旧逻辑
+            transaction_costs = abs_changes * (self.config.commission_rate + self.config.slippage_rate)
+        
         daily_returns = daily_returns - transaction_costs
         
-        # 计算净值曲线
         equity_curve = self.config.initial_capital * (1 + daily_returns.fillna(0)).cumprod()
         
         return equity_curve
